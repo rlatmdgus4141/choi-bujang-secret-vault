@@ -1,13 +1,13 @@
 # BYTE BACK 방어전 자료실 R5
 
-## 현재 단계: 4단계 제작 2 · API 소유자 검사
+## 현재 단계: 4단계 저장점 · API와 DB 소유자 검사
 
 - 저장소: https://github.com/rlatmdgus4141/choi-bujang-secret-vault
 - 브랜치: defense-r5
 - 배포: https://choi-bujang-secret-vault-rosy.vercel.app
 - Supabase: choi-bujang-secret-vault
 - 이전 결과: 1단계 100점, 2단계 90점, 3단계 90점 방어 성공(사용자 확인).
-- 현재는 API 소유자 검사까지 구현했습니다. DB 권한·RLS SQL은 제작 3에서 사용자가 검토·실행합니다.
+- API 소유자 검사와 DB 최소 권한·RLS 정책을 적용했습니다. 제작 3 SQL은 사용자가 검토 후 실행했고 실제 권한을 읽어 대조했습니다.
 
 Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 제공합니다.
 공식 SDK 2.117.2를 package-lock.json에 고정하고 빌드 때 public/vendor로 복사합니다.
@@ -61,10 +61,14 @@ public.notes는 owner_id uuid를 가지며 auth.users 외래키는 없습니다.
 목록은 owner_id가 로그인한 userId인 메모만 반환합니다.
 position은 DB identity 순번으로 생성하여 동시 추가 때 순번 충돌을 피합니다.
 
-RLS를 유지하고 PUBLIC·anon·authenticated의 테이블과 순번 시퀀스 권한을 제거했습니다.
+RLS를 켜고 PUBLIC·anon·authenticated의 기존 테이블 권한을 먼저 회수했습니다.
+authenticated에만 SELECT·INSERT·UPDATE·DELETE를 다시 부여했습니다.
+SELECT·DELETE의 USING, INSERT의 WITH CHECK, UPDATE의 USING과 WITH CHECK는
+모두 (select auth.uid()) = owner_id를 검사합니다. 정책 대상은 authenticated입니다.
+순번 시퀀스의 PUBLIC·anon·authenticated 권한 회수는 유지합니다.
 서버 역할 service_role에는 SELECT·INSERT·UPDATE·DELETE와 순번 사용 권한을 부여했습니다.
 자동 RLS 보조 함수의 공개 실행 권한 제거도 유지합니다.
-브라우저의 DB 직접 접근을 전부 거부하므로 RLS 정책이 없다는 INFO는 의도된 상태입니다.
+비로그인 anon의 DB 직접 접근은 거부합니다. authenticated는 네 RLS 정책에 따라 본인 행만 허용합니다.
 DB의 구조와 권한은 supabase/schema.sql에 있으며 메모 본문·실제 키는 포함하지 않습니다.
 새 프로젝트에서 이 파일로 구조를 재현할 수 있습니다. 기존 내용을 덮어쓰거나 삭제하지 않습니다.
 이 SQL은 기존 메모의 소유자를 자동 변경하지 않습니다.
@@ -73,9 +77,12 @@ DB의 구조와 권한은 supabase/schema.sql에 있으며 메모 본문·실제
 
 3단계에서 남겨 둔 개별 메모의 타인 접근을 이번 API 수정으로 막았습니다.
 service_role은 RLS를 우회하므로 API의 명시적인 소유자 조건이 반드시 필요합니다.
-현재 authenticated의 직접 DB 권한은 아직 회수된 상태입니다.
-본인 행만 허용하는 GRANT와 SELECT·INSERT·UPDATE·DELETE RLS 정책은 제작 3의 별도 SQL 과제입니다.
-이번 제작 2에서는 DB 권한과 정책을 변경하지 않았습니다. supabase/schema.sql도 기존 상태입니다.
+제작 3에서 적용한 네 RLS 정책과 최소 권한을 supabase/schema.sql에도 반영했습니다.
+적용 전 두 역할의 테이블 권한은 모두 없었습니다. 적용 후 role_table_grants와
+has_table_privilege를 대조하여 anon의 8개 권한은 모두 false, authenticated는 CRUD만 true,
+TRUNCATE·REFERENCES·TRIGGER·MAINTAIN은 false임을 확인했습니다.
+공개 publishable key만 사용하고 사용자 JWT 없이 보낸 Data API 요청은 anon으로 처리되어
+HTTP 401과 권한 거부 코드 42501을 반환했습니다. authenticated 직접 Data API 시험은 미실행입니다.
 실제 배포의 A/B 교차 접근 결과는 사용자 화면 확인과 심판 판정으로 별도 확인해야 합니다.
 로컬 시험을 실제 로그인 계정으로 수행한 배포 시험이라고 주장하지 않습니다.
 
@@ -119,17 +126,21 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 - DB 확인: 기존 메모 4건, A 3건·B 1건. 제작 2에서는 DB를 읽기만 했습니다.
 - SDK/DOM 모의 화면 시험: 추가·수정·삭제 흐름과 로그아웃 시 화면·작성 내용 제거 통과.
 - 제작 3 실제 A 계정 브라우저 CRUD: 사용자 확인 완료. 심판 조건 7개 충족, 최종 90점.
-- 4단계 제작 2 배포의 실제 A/B 브라우저 CRUD: 사용자 확인 대기.
+- 4단계 제작 2 배포의 실제 A/B 브라우저 CRUD: 사용자 확인 완료.
+- 제작 3 적용 후 DB 재조회: RLS 활성화, 본인 행 정책 4개, 최소 권한 일치, A 3건·B 1건 보존.
+- 제작 3 적용 후 anon 직접 Data API 조회: HTTP 401, 42501 권한 거부, 메모 반환 없음.
+- 제작 3 적용 후 브라우저 CRUD 재확인은 별도이며 실제 A/B 교차 요청도 미실행입니다.
 - 브라우저 자동 검증은 실행 환경 준비 실패로 미실행입니다.
 - 현재 파일 31개 검색: 기존 가상 메모 본문·비밀값 일치 0건.
-- Supabase 보안 점검: RLS 정책 없음 INFO, Auth 유출 비밀번호 검사 비활성화 WARN 1건.
-  후자는 별도 Auth 설정이며 이 단계의 토큰 검증 결과와 구분합니다.
+- Supabase 보안 점검: RLS 정책 없음 INFO는 해소됐습니다.
+  Auth 유출 비밀번호 검사 비활성화 WARN 1건은 별도 Auth 설정으로 남아 있습니다.
   안내: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
 ## 저장점과 제출
 
-현재는 4단계 제작 2 중간 커밋입니다. 제작 3 SQL 검토·적용과 권한 확인 뒤
-4단계 저장점으로 커밋하고 npm run bundle을 실행합니다. 아직 최종 제출하지 않습니다.
+이 변경은 「4단계 저장점」 커밋입니다. 배포 커밋을 확인한 뒤 npm run bundle로
+현재 커밋의 제출 묶음 artifacts/submission.json을 생성합니다.
+제출 주소는 위 Production 주소이며 심판에게 전할 내용은 선택 사항입니다.
 자기 점검은 정적 자료, 무토큰 목록·추가·개별 조회·수정·삭제, 잘못된 토큰 조회를 실제 요청합니다.
 실제 HTTP 상태와 자료 없는 오류 여부만 기록하며 토큰·메모 본문은 묶음에 넣지 않습니다.
 만료·위조·다른 대상 토큰의 로컬 시험은 실제 심판 판정으로 기록하지 않습니다.

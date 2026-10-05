@@ -1,4 +1,4 @@
--- 3단계 학습 DB의 구조와 권한만 재현합니다. 메모 본문과 실제 키는 포함하지 않습니다.
+-- 4단계 학습 DB의 구조와 권한만 재현합니다. 메모 본문과 실제 키는 포함하지 않습니다.
 -- 새 학습용 프로젝트의 SQL Editor에서 실행합니다. 기존 가상 메모는 보존합니다.
 begin;
 
@@ -23,8 +23,47 @@ select setval(pg_get_serial_sequence('public.notes','position'),
   greatest(coalesce(max(position),0)+1,1),false) from public.notes;
 
 -- 심판 계정도 허용하므로 auth.users 외래키는 걸지 않습니다.
+-- 다른 정책이 추가되어 있으면 중단합니다. 기존 정책을 임의로 지우지 않습니다.
+do $$
+begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'notes'
+      and policyname not in ('notes_select_own', 'notes_insert_own',
+                            'notes_update_own', 'notes_delete_own')
+  ) then
+    raise exception 'Unexpected notes policies exist; review them before continuing.';
+  end if;
+end $$;
+
+revoke all on table public.notes from PUBLIC, anon, authenticated;
+grant select, insert, update, delete on table public.notes to authenticated;
 alter table public.notes enable row level security;
-revoke all privileges on table public.notes from public, anon, authenticated;
+
+-- 같은 파일을 다시 실행해도 이 네 정책만 다시 만듭니다.
+drop policy if exists notes_select_own on public.notes;
+drop policy if exists notes_insert_own on public.notes;
+drop policy if exists notes_update_own on public.notes;
+drop policy if exists notes_delete_own on public.notes;
+
+create policy notes_select_own on public.notes
+  for select to authenticated
+  using ((select auth.uid()) = owner_id);
+
+create policy notes_insert_own on public.notes
+  for insert to authenticated
+  with check ((select auth.uid()) = owner_id);
+
+create policy notes_update_own on public.notes
+  for update to authenticated
+  using ((select auth.uid()) = owner_id)
+  with check ((select auth.uid()) = owner_id);
+
+create policy notes_delete_own on public.notes
+  for delete to authenticated
+  using ((select auth.uid()) = owner_id);
+
+
 grant usage on schema public to service_role;
 grant select, insert, update, delete on table public.notes to service_role;
 revoke all privileges on sequence public.notes_position_seq from public, anon, authenticated;
