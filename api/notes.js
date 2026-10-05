@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
-// 기존 로그인 검증 도우미를 그대로 사용합니다. 소유자 검사는 4단계 과제입니다.
+// 기존 로그인 검증 도우미를 그대로 사용하고 모든 자료 요청에 소유자 조건을 적용합니다.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const publicNote = ({ id, title, content }) => ({ id, title, body: content });
 
@@ -58,6 +58,9 @@ export function createNotesHandler({ clientFactory = createClient, env = process
             || typeof input.body !== 'string' || input.body.length > 20000) {
           return res.status(400).json({ error: '제목은 1~200자, 본문은 20,000자 이내로 입력해 주세요.' });
         }
+        if (Object.hasOwn(input, 'owner_id') && input.owner_id !== identity.userId) {
+          return res.status(403).json({ error: '메모 소유자를 변경할 수 없습니다.' });
+        }
       }
       const db = runtime.client;
       if (!itemRoute && req.method === 'GET') {
@@ -78,15 +81,19 @@ export function createNotesHandler({ clientFactory = createClient, env = process
         if (error || !data) throw new Error('Database write failed');
         return res.status(201).json({ id: data.id });
       }
-      // 3단계의 의도된 남은 허점: 개별 메모는 신원만 확인하며 소유자 비교는 4단계에서 추가합니다.
+      // 행 선택과 변경을 한 DB 요청으로 처리해 소유자 확인 뒤의 경쟁 조건을 피합니다.
+      // 타인 소유와 존재하지 않는 메모는 모두 404로 응답합니다.
       let result;
       if (req.method === 'GET') {
-        result = await db.from('notes').select('id,title,content').eq('id', id).maybeSingle();
+        result = await db.from('notes').select('id,title,content')
+          .eq('id', id).eq('owner_id', identity.userId).maybeSingle();
       } else if (req.method === 'PUT') {
-        result = await db.from('notes').update({ title: input.title.trim(), content: input.body })
-          .eq('id', id).select('id,title,content').maybeSingle();
+        result = await db.from('notes').update({ title: input.title.trim(), content: input.body,
+          owner_id: identity.userId })
+          .eq('id', id).eq('owner_id', identity.userId).select('id,title,content').maybeSingle();
       } else {
-        result = await db.from('notes').delete().eq('id', id).select('id').maybeSingle();
+        result = await db.from('notes').delete().eq('id', id).eq('owner_id', identity.userId)
+          .select('id').maybeSingle();
       }
       if (result.error) throw new Error('Database operation failed');
       if (!result.data) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });

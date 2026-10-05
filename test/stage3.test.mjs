@@ -155,17 +155,18 @@ test('unchanged helper validates signed judge identity and rejects expiry, forge
   assert.equal(await verify(`Bearer ${await sign({}, wrongPair.privateKey)}`), null);
 });
 
-test('stage 3 deployment identity and unchanged starter verifier', async () => {
+test('current deployment identity and unchanged starter verifier', async () => {
   const identity = deploymentIdentity({ VERCEL_GIT_PROVIDER: 'github',
     VERCEL_GIT_REPO_OWNER: 'fixture', VERCEL_GIT_REPO_SLUG: 'vault',
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), VERCEL_URL: 'fixture.vercel.app' }, config);
-  assert.equal(identity.step, 3);
+  assert.equal(identity.step, 4);
+  assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
   const source = await readFile(new URL('../src/verify-login.mjs', import.meta.url));
   const gitBlob = createHash('sha1').update(`blob ${source.length}\0`).update(source).digest('hex');
   assert.equal(gitBlob, '784ec5af7067e01c6b7f83cf423db0b8c63d9e09');
 });
 
-test('stage 3 self-check records actual rejection requests without token or note bodies', async () => {
+test('authenticated stages self-check records actual rejection requests without token or note bodies', async () => {
   const original = globalThis.fetch;
   const calls = [];
   try {
@@ -223,10 +224,10 @@ function crudFixture() {
   });
   const root = createNotesHandler({ env, clientFactory });
   const item = createNotesHandler({ env, clientFactory, itemRoute: true });
-  return { rows, async call(method, bearer, body, id) {
+  return { rows, async call(method, bearer, body, id, extras = {}) {
     const res = response();
-    await (id === undefined ? root : item)({ method, headers: { authorization: bearer }, body,
-      query: id === undefined ? {} : { id } }, res);
+    await (id === undefined ? root : item)({ method, headers: { authorization: bearer, ...extras.headers }, body,
+      query: { ...(id === undefined ? {} : { id }), ...extras.query } }, res);
     return res;
   } };
 }
@@ -234,7 +235,7 @@ function crudFixture() {
 test('A CRUD follows the contract, preserves verified ownership, and returns 404 after deletion', async () => {
   const { call, rows } = crudFixture();
   const bearer = `Bearer ${await token()}`;
-  const input = { title: 'fixture', body: 'test-only', owner_id: 'untrusted', userId: 'untrusted', role: 'admin' };
+  const input = { title: 'fixture', body: 'test-only', userId: 'untrusted', role: 'admin' };
   const created = await call('POST', bearer, input);
   assert.equal(created.statusCode, 201);
   const id = created.body.id;
@@ -244,7 +245,7 @@ test('A CRUD follows the contract, preserves verified ownership, and returns 404
   const list = await call('GET', bearer);
   assert.deepEqual(list.body, [{ id, title: input.title, body: input.body }]);
   assert.deepEqual((await call('GET', bearer, undefined, id)).body, list.body[0]);
-  const edited = await call('PUT', bearer, { title: 'updated', body: 'changed', owner_id: 'untrusted' }, id);
+  const edited = await call('PUT', bearer, { title: 'updated', body: 'changed' }, id);
   assert.equal(edited.statusCode, 200);
   assert.equal(edited.body.body, 'changed');
   assert.equal(rows.get(id).owner_id, userId);
@@ -269,7 +270,7 @@ test('explicit UUID works, duplicate insert cannot overwrite, and malformed inpu
   assert.equal(rows.size, 1);
 });
 
-test('all item operations require authentication; list is own-only but B item access remains for stage 4', async () => {
+test('all item operations require authentication and B cannot read, update or delete A notes', async () => {
   const { call, rows } = crudFixture();
   const a = `Bearer ${await token()}`;
   const b = `Bearer ${await token({ sub: '22222222-2222-4222-8222-222222222222' })}`;
@@ -282,8 +283,77 @@ test('all item operations require authentication; list is own-only but B item ac
   }
   assert.equal(rows.get(id).title, 'fixture');
   assert.deepEqual((await call('GET', b)).body, []);
-  assert.equal((await call('GET', b, undefined, id)).statusCode, 200);
-  assert.equal((await call('PUT', b, { title: 'B fixture', body: '' }, id)).statusCode, 200);
+  assert.equal((await call('GET', b, undefined, id)).statusCode, 404);
+  assert.equal((await call('PUT', b, { title: 'B fixture', body: '' }, id)).statusCode, 404);
   assert.equal(rows.get(id).owner_id, userId);
-  assert.equal((await call('DELETE', b, undefined, id)).statusCode, 200);
+  assert.equal((await call('DELETE', b, undefined, id)).statusCode, 404);
+  assert.equal(rows.get(id).title, 'fixture');
+  assert.equal((await call('GET', a, undefined, id)).statusCode, 200);
+});
+
+test('A and B each retain full CRUD while URL and header identity spoofing cannot cross owners', async () => {
+  const { call, rows } = crudFixture();
+  const bId = '22222222-2222-4222-8222-222222222222';
+  const accounts = [
+    { id: userId, bearer: `Bearer ${await token()}` },
+    { id: bId, bearer: `Bearer ${await token({ sub: bId })}` },
+  ];
+  const ids = [];
+  for (const account of accounts) {
+    const created = await call('POST', account.bearer, { title: 'own fixture', body: 'test-only' });
+    assert.equal(created.statusCode, 201);
+    ids.push(created.body.id);
+    assert.equal(rows.get(created.body.id).owner_id, account.id);
+  }
+  for (let i = 0; i < accounts.length; i++) {
+    const self = accounts[i]; const other = accounts[1 - i]; const ownId = ids[i]; const otherId = ids[1 - i];
+    const spoof = { query: { owner_id: other.id, userId: other.id, role: 'admin' },
+      headers: { 'x-user-id': other.id, 'x-role': 'admin' } };
+    const list = await call('GET', self.bearer, undefined, undefined, spoof);
+    assert.deepEqual(list.body.map(row => row.id), [ownId]);
+    assert.equal((await call('GET', self.bearer, undefined, ownId)).statusCode, 200);
+    assert.equal((await call('PUT', self.bearer, { title: 'updated own', body: 'changed' }, ownId)).statusCode, 200);
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      const denied = await call(method, self.bearer, { title: 'tampered', body: '' }, otherId, spoof);
+      assert.equal(denied.statusCode, 404);
+      assert.deepEqual(Object.keys(denied.body), ['error']);
+    }
+  }
+  for (let i = 0; i < accounts.length; i++) {
+    assert.equal((await call('DELETE', accounts[i].bearer, undefined, ids[i])).statusCode, 200);
+    assert.equal((await call('GET', accounts[i].bearer, undefined, ids[i])).statusCode, 404);
+  }
+});
+
+test('POST and PUT reject supplied ownership transfer without creating or changing rows', async () => {
+  const { call, rows } = crudFixture();
+  const bearer = `Bearer ${await token()}`;
+  const input = { title: 'fixture', body: 'test-only' };
+  const created = await call('POST', bearer, input);
+  const id = created.body.id;
+  for (const forged of ['22222222-2222-4222-8222-222222222222', null, '', ['untrusted']]) {
+    assert.equal((await call('POST', bearer, { ...input, owner_id: forged })).statusCode, 403);
+    assert.equal((await call('PUT', bearer, { title: 'changed', body: '', owner_id: forged }, id)).statusCode, 403);
+    assert.equal(rows.size, 1);
+    assert.equal(rows.get(id).title, input.title);
+    assert.equal(rows.get(id).owner_id, userId);
+  }
+  assert.equal((await call('PUT', bearer, { ...input, owner_id: userId }, id)).statusCode, 200);
+  assert.equal(rows.get(id).owner_id, userId);
+});
+
+test('student cannot access judge-owned or ownerless rows; missing ownership never grants access', async () => {
+  const { call, rows } = crudFixture();
+  const bearer = `Bearer ${await token()}`;
+  const ids = ['44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555'];
+  for (let i = 0; i < ids.length; i++) rows.set(ids[i], { id: ids[i], title: 'restricted fixture',
+    content: 'test-only', owner_id: i === 0 ? '66666666-6666-4666-8666-666666666666' : null });
+  assert.deepEqual((await call('GET', bearer)).body, []);
+  for (const id of ids) for (const method of ['GET', 'PUT', 'DELETE']) {
+    const denied = await call(method, bearer, { title: 'tampered', body: '' }, id);
+    assert.equal(denied.statusCode, 404);
+    assert.deepEqual(Object.keys(denied.body), ['error']);
+    assert.equal(rows.get(id).title, 'restricted fixture');
+  }
+  assert.equal(rows.size, 2);
 });
