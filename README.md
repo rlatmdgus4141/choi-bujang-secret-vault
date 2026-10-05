@@ -38,6 +38,11 @@ judgeIssuer는 시작 틀의 운영 설정을 유지합니다.
 
 ## SQL 보관과 실행
 
+공개 가능한 구조·권한 SQL은 [supabase/schema.sql](supabase/schema.sql)에 있습니다.
+새 학습용 프로젝트의 SQL Editor에서 이 파일을 먼저 실행하면 테이블과 접근 권한을 재현할 수 있습니다.
+메모 본문과 실제 키는 포함하지 않으며 기존 메모를 삭제하거나 덮어쓰지 않습니다.
+현재 학습용 DB에는 같은 구조와 권한이 이미 적용되어 있습니다.
+
 메모 본문이 포함된 aleph_stage2_setup.sql은 Git 밖에서 따로 제공합니다.
 Supabase 연결 기능으로 이미 실행했으므로 SQL Editor에서 다시 실행할 필요는 없습니다.
 재실행이 필요하면 공식 SQL Editor에서 해당 파일을 실행합니다.
@@ -50,12 +55,14 @@ Supabase 연결 기능으로 이미 실행했으므로 SQL Editor에서 다시 �
 ```sh
 npm ci
 npm run build -- --local
-npm run test:r5
-npm run test:stage2
+npm test
 npm run check:stage2
 ```
 
 로컬 빌드는 정적 파일만 생성하며 API 실행이나 Vercel 배포를 증명하지 않습니다.
+필수 환경변수 이름은 [.env.example](.env.example)에 빈 값으로 제공합니다.
+실제 값은 Vercel 프로젝트 Settings → Environment Variables의 Production 환경에 입력합니다.
+SUPABASE_SECRET_KEY는 Secret 유형으로 저장합니다. 예시 파일에 실제 값을 적어 커밋하지 않습니다.
 실제 배포는 Vercel Production 브랜치 defense-r5를 사용합니다.
 서버 키가 없으면 자료 화면에 오류가 나므로 키 설정 후 배포해야 합니다.
 
@@ -81,10 +88,13 @@ src/attack-check.mjs는 빈 정적 자료와 공개 API의 남은 약점을 실�
 
 ## 검증 기록
 
+- 2단계 심판 결과: 필수 조건 4개 충족, 완결성 가점 2개, 90점 방어 성공(학생 확인).
+- 후속 보완: 메모 없는 공개 스키마 SQL, 빈 환경변수 예시, 통합 테스트 명령 추가.
+  이 보완의 추가 점수는 재제출 후 심판 결과로 확인합니다.
 - Supabase DB 이전과 권한 확인: 실행 완료.
 - 자동 RLS 보조 함수의 공개 실행 권한 제거 후 보안 점검: WARN 없음.
 - 로컬 빌드: 통과. 기존 테스트 2개와 2단계 테스트 5개: 모두 통과.
-- 현재 작업 파일 26개 검색: 메모 본문·비밀값 일치 0건.
+- 현재 작업 파일 28개 검색: 메모 본문·비밀값 일치 0건.
 - SUPABASE_URL과 서버 키: Production 등록 확인.
 - GitHub 최신 커밋과 Production은 아래 검증 명령으로 대조합니다.
 - 실제 정적 자료·공개 API 요청 결과는 제출 묶음의 attackAttempts에 기록합니다.

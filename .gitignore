@@ -2,5 +2,6 @@ artifacts/
 bundle-notes.json
 .env
 .env.*
+!.env.example
 node_modules/
 public/aleph.json
