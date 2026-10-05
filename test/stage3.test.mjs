@@ -1,0 +1,182 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { generateKeyPair, SignJWT, jwtVerify, createLocalJWKSet, exportJWK } from 'jose';
+import { createNotesHandler } from '../api/notes.js';
+import { createLoginVerifier } from '../src/verify-login.mjs';
+import { deploymentIdentity } from '../scripts/deployment-identity.mjs';
+import { runAttackChecks } from '../src/attack-check.mjs';
+import config from '../aleph.config.json' with { type: 'json' };
+
+// 시험용 서명 키와 토큰은 실행 중 메모리에만 두며 실제 서비스에서는 사용하지 않습니다.
+const pair = await generateKeyPair('ES256');
+const wrongPair = await generateKeyPair('ES256');
+const userId = '11111111-1111-4111-8111-111111111111';
+const key = ['sb', 'secret', 'fixture'].join('_');
+const env = { SUPABASE_URL: new URL(config.identityProvider.issuer).origin, SUPABASE_SECRET_KEY: key };
+const now = () => Math.floor(Date.now() / 1000);
+const claims = () => ({ iss: config.identityProvider.issuer, aud: 'authenticated',
+  sub: userId, role: 'authenticated', iat: now(), exp: now() + 300 });
+const token = (patch = {}, signingKey = pair.privateKey) => new SignJWT({ ...claims(), ...patch })
+  .setProtectedHeader({ alg: 'ES256' }).sign(signingKey);
+function response() {
+  return { headers: {}, statusCode: 0, body: undefined,
+    setHeader(name, value) { this.headers[name] = value; },
+    status(value) { this.statusCode = value; return this; },
+    json(value) { this.body = value; return this; } };
+}
+function fixture({ failDb = false, claimPatch } = {}) {
+  const calls = { reads: 0, claims: 0, clients: 0 };
+  const clientFactory = (url, secret, options) => {
+    calls.clients++;
+    assert.equal(url, env.SUPABASE_URL);
+    assert.equal(secret, key);
+    assert.equal(options.auth.persistSession, false);
+    return {
+      auth: { async getClaims(value) {
+        calls.claims++;
+        try {
+          const { payload } = await jwtVerify(value, pair.publicKey);
+          return { data: { claims: { ...payload, ...claimPatch } }, error: null };
+        } catch { return { data: null, error: new Error('fixture verification failed') }; }
+      } },
+      from(table) {
+        calls.reads++;
+        assert.equal(table, 'notes');
+        return { select(fields) {
+          assert.equal(fields, 'id,title,content');
+          return { async order(column) {
+            assert.equal(column, 'position');
+            return failDb ? { data: null, error: new Error(key) }
+              : { data: [{ id: userId, title: 'fixture', content: 'test-only', extra: key }], error: null };
+          } };
+        } };
+      },
+    };
+  };
+  return { calls, handler: createNotesHandler({ env, clientFactory }) };
+}
+const request = (authorization, method = 'GET') => ({ method, headers: { authorization },
+  body: { userId, role: 'authenticated' }, query: { userId, role: 'authenticated' } });
+
+test('no login denies GET and POST before client or database use, ignoring submitted identity', async () => {
+  const { calls, handler } = fixture();
+  for (const method of ['GET', 'POST', 'PUT', 'DELETE']) {
+    const res = response();
+    await handler(request(undefined, method), res);
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(Object.keys(res.body), ['error']);
+    assert.equal(res.headers['Cache-Control'], 'no-store');
+  }
+  assert.deepEqual(calls, { reads: 0, claims: 0, clients: 0 });
+});
+
+test('valid signed student login reads only allowed fields and reuses the verifier', async () => {
+  const { calls, handler } = fixture();
+  const authorization = `Bearer ${await token()}`;
+  for (let i = 0; i < 2; i++) {
+    const res = response();
+    await handler(request(authorization), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers.Vary, 'Authorization');
+    assert.equal(res.body.notes.length, 1);
+    assert.deepEqual(Object.keys(res.body.notes[0]).sort(), ['content', 'id', 'title']);
+    assert.equal(JSON.stringify(res.body).includes(key), false);
+  }
+  assert.deepEqual(calls, { reads: 2, claims: 2, clients: 1 });
+});
+
+test('malformed, forged, expired, wrong audience, wrong issuer, role and subject tokens cannot read', async () => {
+  const values = ['invalid', ['Bearer duplicate'], `Bearer ${await token({}, wrongPair.privateKey)}`,
+    ...await Promise.all([
+      { exp: now() - 30 }, { aud: 'another-service' }, { iss: 'https://another.supabase.co/auth/v1' },
+      { role: 'anon' }, { sub: 'not-a-uuid' }, { exp: undefined },
+    ].map(async patch => `Bearer ${await token(patch)}`))];
+  const { calls, handler } = fixture();
+  for (const value of values) {
+    const res = response();
+    await handler(request(value), res);
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(Object.keys(res.body), ['error']);
+  }
+  assert.equal(calls.reads, 0);
+});
+
+test('helper checks expired claims even if the SDK were to return them', async () => {
+  const { calls, handler } = fixture({ claimPatch: { exp: now() - 1 } });
+  const res = response();
+  await handler(request(`Bearer ${await token()}`), res);
+  assert.equal(res.statusCode, 401);
+  assert.equal(calls.reads, 0);
+});
+
+test('configuration errors, database failures and authenticated unsupported methods do not expose secrets', async () => {
+  const authorization = `Bearer ${await token()}`;
+  for (const badEnv of [{}, { ...env, SUPABASE_SECRET_KEY: 'client-key' },
+    { ...env, SUPABASE_URL: 'https://another.supabase.co' }]) {
+    const res = response();
+    await createNotesHandler({ env: badEnv })(request(authorization), res);
+    assert.equal(res.statusCode, 503);
+  }
+  const { handler } = fixture({ failDb: true });
+  const res = response();
+  await handler(request(authorization), res);
+  assert.equal(res.statusCode, 502);
+  assert.equal(JSON.stringify(res.body).includes(key), false);
+  const post = response();
+  await handler(request(authorization, 'POST'), post);
+  assert.equal(post.statusCode, 405);
+  assert.equal(post.headers.Allow, 'GET');
+});
+
+test('unchanged helper validates signed judge identity and rejects expiry, forged signature and wrong service', async () => {
+  const jwk = await exportJWK(pair.publicKey);
+  const verify = createLoginVerifier({ config,
+    judgeKeySet: createLocalJWKSet({ keys: [{ ...jwk, alg: 'ES256' }] }),
+    supabaseClient: { auth: { getClaims() { throw new Error('wrong verification branch'); } } },
+  });
+  const judge = { ...claims(), iss: config.judgeIssuer,
+    aud: new URL(config.publicAppUrl).hostname, aleph_role: 'judge',
+    aleph_run: '22222222-2222-4222-8222-222222222222', aleph_identity: 'a' };
+  const sign = (patch = {}, signer = pair.privateKey) => new SignJWT({ ...judge, ...patch })
+    .setProtectedHeader({ alg: 'ES256' }).sign(signer);
+  const identity = await verify(`Bearer ${await sign()}`);
+  assert.equal(identity.userId, userId);
+  assert.equal(identity.kind, 'judge');
+  for (const patch of [{ aud: 'another.vercel.app' }, { exp: now() - 30, iat: now() - 60 },
+    { aleph_identity: 'c' }, { aleph_role: 'student' }, { exp: now() + 1000 }]) {
+    assert.equal(await verify(`Bearer ${await sign(patch)}`), null);
+  }
+  assert.equal(await verify(`Bearer ${await sign({}, wrongPair.privateKey)}`), null);
+});
+
+test('stage 3 deployment identity and unchanged starter verifier', async () => {
+  const identity = deploymentIdentity({ VERCEL_GIT_PROVIDER: 'github',
+    VERCEL_GIT_REPO_OWNER: 'fixture', VERCEL_GIT_REPO_SLUG: 'vault',
+    VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), VERCEL_URL: 'fixture.vercel.app' }, config);
+  assert.equal(identity.step, 3);
+  const source = await readFile(new URL('../src/verify-login.mjs', import.meta.url));
+  const gitBlob = createHash('sha1').update(`blob ${source.length}\0`).update(source).digest('hex');
+  assert.equal(gitBlob, '784ec5af7067e01c6b7f83cf423db0b8c63d9e09');
+});
+
+test('stage 3 self-check records actual rejection requests without token or note bodies', async () => {
+  const original = globalThis.fetch;
+  const calls = [];
+  try {
+    globalThis.fetch = async (url, options) => {
+      calls.push({ path: new URL(url).pathname, options });
+      return new URL(url).pathname === '/data.json' ? Response.json({ notes: [] })
+        : Response.json({ error: 'login required' }, { status: 401 });
+    };
+    const checks = await runAttackChecks(config);
+    assert.equal(calls.length, 4);
+    assert.equal(calls[2].options.method, 'POST');
+    assert.ok(checks.slice(1).every(check => check.observed.includes('HTTP 401')));
+    assert.equal(JSON.stringify(checks).includes('Bearer'), false);
+    globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
+    const failed = await runAttackChecks(config);
+    assert.ok(failed.every(check => check.observed.includes('확인 실패')));
+  } finally { globalThis.fetch = original; }
+});

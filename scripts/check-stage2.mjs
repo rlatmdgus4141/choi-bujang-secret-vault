@@ -43,7 +43,7 @@ if (process.argv.includes('--deployed')) {
     if (path === '/aleph.json') {
       try {
         const identity = JSON.parse(text);
-        if (identity.step !== 2 || identity.repoUrl !== config.repoUrl
+        if (identity.step !== config.step || identity.repoUrl !== config.repoUrl
             || identity.commit !== git('rev-parse', 'HEAD').trim()) failures++;
       } catch { failures++; }
     }

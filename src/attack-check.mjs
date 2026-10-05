@@ -1,7 +1,7 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -16,6 +16,38 @@ export async function runAttackChecks(config) {
   const response = await fetch(new URL('/data.json', app), {
     redirect: 'error', signal: AbortSignal.timeout(10000),
   });
+  if (config.step === 3) {
+    let empty = false;
+    try {
+      const data = await response.json();
+      empty = response.ok && Array.isArray(data?.notes) && data.notes.length === 0
+        && Object.keys(data).length === 1;
+    } catch { /* 응답 본문을 기록하지 않습니다. */ }
+    const attempts = [{ attackId: 'static_note_seed_read',
+      expected: '현재 공개 data.json에는 빈 notes 배열만 있음',
+      observed: empty ? 'HTTP 200, 메모 0건과 1단계 확인 표시 없음 확인'
+        : `정적 자료 제거 확인 실패 (HTTP ${response.status})` }];
+    for (const check of [
+      { attackId: 'anonymous_note_read', method: 'GET' },
+      { attackId: 'anonymous_note_create', method: 'POST' },
+      { attackId: 'malformed_login_token', method: 'GET', headers: { Authorization: 'Bearer invalid' } },
+    ]) {
+      const api = await fetch(new URL('/api/notes', app), {
+        method: check.method, headers: check.headers, redirect: 'error',
+        signal: AbortSignal.timeout(15000),
+      });
+      let denied = false;
+      try {
+        const data = await api.json();
+        denied = api.status === 401 && Object.keys(data).length === 1
+          && typeof data.error === 'string';
+      } catch { /* 오류 응답 원문은 제출하지 않습니다. */ }
+      attempts.push({ attackId: check.attackId, expected: '유효한 로그인 없이 메모 접근 거부',
+        observed: denied ? 'HTTP 401, 메모 없는 오류 응답 확인'
+          : `인증 거부 확인 실패 (HTTP ${api.status})` });
+    }
+    return attempts;
+  }
   if (config.step === 2) {
     let empty = false;
     try {

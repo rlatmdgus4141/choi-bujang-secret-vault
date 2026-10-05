@@ -45,7 +45,7 @@
         cache: 'no-store', signal: request.signal,
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!response.ok) throw new Error('notes_unavailable');
+      if (!response.ok) throw new Error(response.status === 401 ? 'login_required' : 'notes_unavailable');
       const data = await response.json();
       if (!Array.isArray(data.notes)) throw new Error('invalid_notes');
       if (version !== requestVersion || !currentSession) return;
@@ -58,9 +58,11 @@
         row.append(title, content);
         return row;
       }));
-    } catch {
+    } catch (error) {
       if (request.signal.aborted || version !== requestVersion || !currentSession) return;
-      item.textContent = '자료를 불러올 수 없습니다. 잠시 후 새로고침해 주세요.';
+      item.textContent = error.message === 'login_required'
+        ? '서버에서 로그인을 확인하지 못했습니다. 로그아웃한 뒤 다시 로그인해 주세요.'
+        : '자료를 불러올 수 없습니다. 잠시 후 새로고침해 주세요.';
       list.replaceChildren(item);
     }
   }
