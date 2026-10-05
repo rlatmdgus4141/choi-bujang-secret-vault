@@ -5,6 +5,8 @@
   "scripts": {
     "build": "node scripts/build-public.mjs",
     "test:r5": "node --test test/r5.test.mjs",
+    "test:stage2": "node --test test/stage2.test.mjs",
+    "check:stage2": "node scripts/check-stage2.mjs",
     "bundle": "node scripts/bundle.mjs",
     "decider:test": "node scripts/decider-test.mjs",
     "detect:test": "node scripts/detect-test.mjs",
