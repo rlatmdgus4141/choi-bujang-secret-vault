@@ -1,4 +1,4 @@
--- 4단계 학습 DB의 구조와 권한만 재현합니다. 메모 본문과 실제 키는 포함하지 않습니다.
+-- 5단계 학습 DB의 구조와 권한만 재현합니다. 메모 본문과 실제 키는 포함하지 않습니다.
 -- 새 학습용 프로젝트의 SQL Editor에서 실행합니다. 기존 가상 메모는 보존합니다.
 begin;
 
@@ -37,7 +37,7 @@ begin
 end $$;
 
 revoke all on table public.notes from PUBLIC, anon, authenticated;
-grant select, insert, update, delete on table public.notes to authenticated;
+-- 5단계에서는 authenticated에도 직접 테이블 권한을 부여하지 않습니다.
 alter table public.notes enable row level security;
 
 -- 같은 파일을 다시 실행해도 이 네 정책만 다시 만듭니다.

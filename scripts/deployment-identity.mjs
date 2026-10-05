@@ -11,12 +11,16 @@ export function deploymentIdentity(env, config) {
   if (env.VERCEL_GIT_PROVIDER !== 'github' || !OWNER.test(owner || '')
       || !REPO.test(repo || '') || repo === '.' || repo === '..'
       || repo.toLowerCase().endsWith('.git') || !SHA.test(commit || '')
-      || !HOST.test(host || '') || ![1, 2, 3, 4].includes(config?.step)
+      || !HOST.test(host || '') || ![1, 2, 3, 4, 5].includes(config?.step)
       || typeof config.judgeIssuer !== 'string'
       || !/^https:\/\/[a-z0-9-]+\.up\.railway\.app\/defense\/judge$/iu.test(config.judgeIssuer)
       || typeof config.sampleMarker !== 'string'
       || !/^[A-Z0-9_]{1,80}$/u.test(config.sampleMarker)) {
     throw new Error('배포 식별 정보를 확인할 수 없습니다. Vercel 시스템 환경변수와 자료실 단계를 확인하세요.');
+  }
+  if (config.step >= 5 && config.originalApiUrl !==
+      new URL('/rest/v1/notes', config.identityProvider.issuer).href) {
+    throw new Error('원본 자료 주소는 같은 Supabase 프로젝트의 쿼리 없는 HTTPS 메모 경로여야 합니다.');
   }
   return {
     schema: 'aleph.defense.deployment.v1',
@@ -31,5 +35,6 @@ export function deploymentIdentity(env, config) {
         audience: config.identityProvider.audience, jwksUrl: config.identityProvider.jwksUrl },
       allowedRoutes: config.allowedRoutes.map(({ method, path }) => ({ method, path })),
     } : {}),
+    ...(config.step >= 5 ? { originalApiUrl: config.originalApiUrl } : {}),
   };
 }

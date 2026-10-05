@@ -6,8 +6,8 @@ const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'data.json');
 const output = resolve(root, 'public', 'data.json');
 const config = JSON.parse(await readFile(resolve(root, 'aleph.config.json'), 'utf8'));
-if (![1, 2, 3, 4].includes(config.step)) {
-  throw new Error('현재 구현된 자료실 단계는 1~4단계입니다.');
+if (![1, 2, 3, 4, 5].includes(config.step)) {
+  throw new Error('현재 구현된 자료실 단계는 1~5단계입니다.');
 }
 const data = JSON.parse(await readFile(source, 'utf8'));
 if (!Array.isArray(data.notes)) {

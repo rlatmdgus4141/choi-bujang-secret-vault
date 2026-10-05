@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -48,6 +49,34 @@ export async function runAttackChecks(config) {
       attempts.push({ attackId: check.attackId, expected: '유효한 로그인 없이 메모 접근 거부',
         observed: denied ? 'HTTP 401, 메모 없는 오류 응답 확인'
           : `인증 거부 확인 실패 (HTTP ${api.status})` });
+    }
+    if (config.step >= 5) {
+      if (config.originalApiUrl !== new URL('/rest/v1/notes', config.identityProvider.issuer).href) {
+        throw new Error('원본 자료 주소가 해당 Supabase 메모 경로와 다릅니다.');
+      }
+      // 브라우저에 이미 공개된 publishable key만 사용합니다. 사용자 JWT나 서버 키는 읽지 않습니다.
+      const frontend = readFileSync(new URL('../public/auth.js', import.meta.url), 'utf8');
+      const publicKey = frontend.match(/const publishableKey = '(sb_publishable_[A-Za-z0-9_-]+)'/u)?.[1];
+      if (!publicKey) throw new Error('공개 키를 확인할 수 없어 원본 API 점검을 중단했습니다.');
+      for (const method of ['GET', 'PATCH']) {
+        const url = new URL(config.originalApiUrl);
+        // id는 NOT NULL인 기본키입니다. PATCH 조건은 어떤 기존 행에도 일치하지 않습니다.
+        url.search = method === 'GET' ? 'select=id&limit=1' : 'id=is.null';
+        const direct = await fetch(url, { method, redirect: 'error',
+          headers: { apikey: publicKey, ...(method === 'PATCH' ? { 'Content-Type': 'application/json' } : {}) },
+          ...(method === 'PATCH' ? { body: JSON.stringify({ title: 'permission-check' }) } : {}),
+          signal: AbortSignal.timeout(15000),
+        });
+        let denied = false;
+        try {
+          const data = await direct.json();
+          denied = [401, 403].includes(direct.status) && data?.code === '42501';
+        } catch { /* 응답 원문과 키는 기록하지 않습니다. */ }
+        attempts.push({ attackId: method === 'GET' ? 'anon_original_read' : 'anon_original_update',
+          expected: '공개 키만으로 원본 메모 테이블 직접 접근 거부',
+          observed: denied ? `HTTP ${direct.status}, DB 권한 거부 확인; 자료·키 기록 없음`
+            : `원본 권한 거부 확인 실패 (HTTP ${direct.status})` });
+      }
     }
     return attempts;
   }

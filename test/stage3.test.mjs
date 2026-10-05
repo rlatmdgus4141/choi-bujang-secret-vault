@@ -159,7 +159,8 @@ test('current deployment identity and unchanged starter verifier', async () => {
   const identity = deploymentIdentity({ VERCEL_GIT_PROVIDER: 'github',
     VERCEL_GIT_REPO_OWNER: 'fixture', VERCEL_GIT_REPO_SLUG: 'vault',
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), VERCEL_URL: 'fixture.vercel.app' }, config);
-  assert.equal(identity.step, 4);
+  assert.equal(identity.step, 5);
+  assert.equal(identity.originalApiUrl, config.originalApiUrl);
   assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
   const source = await readFile(new URL('../src/verify-login.mjs', import.meta.url));
   const gitBlob = createHash('sha1').update(`blob ${source.length}\0`).update(source).digest('hex');
@@ -171,15 +172,21 @@ test('authenticated stages self-check records actual rejection requests without 
   const calls = [];
   try {
     globalThis.fetch = async (url, options) => {
-      calls.push({ path: new URL(url).pathname, options });
+      calls.push({ path: new URL(url).pathname, search: new URL(url).search, options });
+      if (new URL(url).pathname === '/rest/v1/notes') return Response.json({ code: '42501' }, { status: 401 });
       return new URL(url).pathname === '/data.json' ? Response.json({ notes: [] })
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, 7);
+    assert.equal(calls.length, 9);
     assert.equal(calls[2].options.method, 'POST');
     assert.ok(checks.slice(1).every(check => check.observed.includes('HTTP 401')));
     assert.equal(JSON.stringify(checks).includes('Bearer'), false);
+    assert.equal(JSON.stringify(checks).includes('sb_publishable_'), false);
+    assert.ok(calls.slice(7).every(call => call.options.headers.apikey.startsWith('sb_publishable_')
+      && !call.options.headers.Authorization));
+    assert.equal(calls[8].options.method, 'PATCH');
+    assert.equal(calls[8].search, '?id=is.null');
     globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
     const failed = await runAttackChecks(config);
     assert.ok(failed.every(check => check.observed.includes('확인 실패')));

@@ -1,5 +1,5 @@
 {
-  "step": 4,
+  "step": 5,
   "repoUrl": "https://github.com/rlatmdgus4141/choi-bujang-secret-vault",
   "publicAppUrl": "https://choi-bujang-secret-vault-rosy.vercel.app",
   "sampleMarker": "SAMPLE_NOTE_1",
@@ -16,6 +16,6 @@
     { "method": "PUT", "path": "/api/notes/:id" },
     { "method": "DELETE", "path": "/api/notes/:id" }
   ],
-  "originalApiUrl": null,
+  "originalApiUrl": "https://nsqtwulghnijprefvfud.supabase.co/rest/v1/notes",
   "restoreRoute": null
 }

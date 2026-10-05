@@ -1,19 +1,30 @@
 # BYTE BACK 방어전 자료실 R5
 
-## 현재 단계: 4단계 저장점 · API와 DB 소유자 검사
+## 현재 단계: 5단계 저장점 · 자료 요청을 서버 한곳으로 모읍니다
 
 - 저장소: https://github.com/rlatmdgus4141/choi-bujang-secret-vault
 - 브랜치: defense-r5
 - 배포: https://choi-bujang-secret-vault-rosy.vercel.app
 - Supabase: choi-bujang-secret-vault
-- 이전 결과: 1단계 100점, 2단계 90점, 3단계 90점 방어 성공(사용자 확인).
-- API 소유자 검사와 DB 최소 권한·RLS 정책을 적용했습니다. 제작 3 SQL은 사용자가 검토 후 실행했고 실제 권한을 읽어 대조했습니다.
+- 이전 결과: 1단계 100점, 2단계 90점, 3단계 90점, 4단계 90점 방어 성공(사용자 확인).
+- 사용자가 5단계 권한 회수 SQL을 검토·실행했습니다. 실제 DB에서 두 역할의 직접 권한 회수와 서버 CRUD 권한 보존을 확인했습니다.
 
 Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 제공합니다.
 공식 SDK 2.117.2를 package-lock.json에 고정하고 빌드 때 public/vendor로 복사합니다.
 브라우저에는 Project URL과 publishable key만 포함합니다.
 비밀번호는 공식 SDK에 전달한 뒤 입력창에서 지우며 직접 저장·기록하지 않습니다.
 세션 저장과 갱신은 SDK에 맡기고 JWT를 화면·로그·Git·제출 묶음에 출력하지 않습니다.
+
+## 5단계 변경
+
+브라우저의 Supabase 직접 메모 호출은 없습니다. Auth 호출은 유지하며
+메모 읽기·추가·수정·삭제는 모두 /api/notes와 /api/notes/:id를 사용합니다.
+public.notes의 PUBLIC·anon·authenticated 직접 테이블 권한을 회수했습니다.
+서버 역할 service_role의 기존 권한과 로그인·소유자 검사는 보존했습니다.
+원본 자료 경로는 https://nsqtwulghnijprefvfud.supabase.co/rest/v1/notes 입니다.
+aleph.config.json과 배포 식별 정보의 originalApiUrl에 쿼리 없는 HTTPS 경로를 기록합니다.
+Project URL과 publishable key는 Auth에 필요한 공개 설정이며 서버 전용 키는 브라우저에 없습니다.
+서버 키, 원본 로그인 검증 도우미, API 소유자 검사, Auth 설정은 변경하지 않았습니다.
 
 ## 서버 인증과 메모 API
 
@@ -44,7 +55,7 @@ api/notes/[id].js는 같은 인증·자료 처리 함수를 연결합니다.
 응답에 Cache-Control: no-store와 Vary: Authorization을 지정합니다.
 제목은 1~200자, 본문은 20,000자 이내이며 화면은 textContent로 메모를 표시합니다.
 
-aleph.config.json의 step은 4입니다. API 메서드·경로와 응답 계약은 3단계 그대로 유지합니다.
+aleph.config.json의 step은 5입니다. API 메서드·경로와 응답 계약은 3단계 그대로 유지합니다.
 identityProvider에는 해당 Supabase의 /auth/v1 발급자, audience authenticated,
 /.well-known/jwks.json 공개키 주소를 기록했습니다. 실제 키는 포함하지 않습니다.
 allowedRoutes에는 위 GET·POST·PUT·DELETE 경로를 method/path로 기록했습니다.
@@ -62,29 +73,31 @@ public.notes는 owner_id uuid를 가지며 auth.users 외래키는 없습니다.
 position은 DB identity 순번으로 생성하여 동시 추가 때 순번 충돌을 피합니다.
 
 RLS를 켜고 PUBLIC·anon·authenticated의 기존 테이블 권한을 먼저 회수했습니다.
-authenticated에만 SELECT·INSERT·UPDATE·DELETE를 다시 부여했습니다.
+4단계에서 부여했던 authenticated의 SELECT·INSERT·UPDATE·DELETE도 5단계에서 회수했습니다.
 SELECT·DELETE의 USING, INSERT의 WITH CHECK, UPDATE의 USING과 WITH CHECK는
 모두 (select auth.uid()) = owner_id를 검사합니다. 정책 대상은 authenticated입니다.
 순번 시퀀스의 PUBLIC·anon·authenticated 권한 회수는 유지합니다.
-서버 역할 service_role에는 SELECT·INSERT·UPDATE·DELETE와 순번 사용 권한을 부여했습니다.
+서버 역할 service_role의 기존 CRUD·순번 사용 권한은 보존했습니다.
+이 역할에 기존부터 있던 추가 권한은 이번 테이블 직접 접근 차단 범위에서 변경하지 않았습니다.
 자동 RLS 보조 함수의 공개 실행 권한 제거도 유지합니다.
-비로그인 anon의 DB 직접 접근은 거부합니다. authenticated는 네 RLS 정책에 따라 본인 행만 허용합니다.
+anon과 authenticated 모두 테이블 직접 접근을 거부합니다.
+네 RLS 정책은 유지하지만 테이블 권한을 대신 부여하지 않으므로 직접 접근을 열지 않습니다.
 DB의 구조와 권한은 supabase/schema.sql에 있으며 메모 본문·실제 키는 포함하지 않습니다.
 새 프로젝트에서 이 파일로 구조를 재현할 수 있습니다. 기존 내용을 덮어쓰거나 삭제하지 않습니다.
 이 SQL은 기존 메모의 소유자를 자동 변경하지 않습니다.
 
 ## API 검사와 DB 정책
 
-3단계에서 남겨 둔 개별 메모의 타인 접근을 이번 API 수정으로 막았습니다.
+4단계의 API 소유자 검사와 RLS 정책을 유지합니다.
 service_role은 RLS를 우회하므로 API의 명시적인 소유자 조건이 반드시 필요합니다.
-제작 3에서 적용한 네 RLS 정책과 최소 권한을 supabase/schema.sql에도 반영했습니다.
-적용 전 두 역할의 테이블 권한은 모두 없었습니다. 적용 후 role_table_grants와
-has_table_privilege를 대조하여 anon의 8개 권한은 모두 false, authenticated는 CRUD만 true,
-TRUNCATE·REFERENCES·TRIGGER·MAINTAIN은 false임을 확인했습니다.
-공개 publishable key만 사용하고 사용자 JWT 없이 보낸 Data API 요청은 anon으로 처리되어
-HTTP 401과 권한 거부 코드 42501을 반환했습니다. authenticated 직접 Data API 시험은 미실행입니다.
-실제 배포의 A/B 교차 접근 결과는 사용자 화면 확인과 심판 판정으로 별도 확인해야 합니다.
-로컬 시험을 실제 로그인 계정으로 수행한 배포 시험이라고 주장하지 않습니다.
+5단계 SQL 적용 전 authenticated는 CRUD 권한이 있었고 anon은 권한이 없었습니다.
+적용 후 role_table_grants와 has_table_privilege로 anon·authenticated의
+SELECT·INSERT·UPDATE·DELETE·TRUNCATE·REFERENCES·TRIGGER·MAINTAIN이 모두 false임을 확인했습니다.
+열 단위 권한도 SQL의 검증 절차에서 남지 않았음을 확인했습니다.
+공개 publishable key만 사용하는 실제 원본 GET 및 PATCH 요청 결과는 제출 자기 점검에 기록합니다.
+PATCH는 id=is.null 조건으로 기본키가 있는 기존 행을 수정하지 않습니다.
+이 점검은 anon 요청이며 실제 authenticated 사용자 토큰의 원본 직접 접근 시험과 구분합니다.
+실제 사용자 토큰은 에이전트에게 전달하거나 제출 묶음에 기록하지 않습니다.
 
 현재 파일의 메모 제거만으로 과거 노출이 해소되지는 않습니다.
 이전 공개 Git 커밋, 기존 Vercel 배포, 포크·캐시·내려받은 사본은 남을 수 있습니다.
@@ -117,7 +130,7 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 ## 검증 기록
 
 - 제작 1 로그인·로그아웃, 제작 2 서버 인증 후 네 메모 표시: 사용자 화면 확인 완료.
-- 4단계 제작 2 로컬 빌드와 회귀·인증·CRUD·소유자 시험 총 19개: 통과.
+- 5단계 로컬 빌드와 회귀·인증·CRUD·소유자·원본 점검 시험 총 19개: 통과.
 - 정상 서명, 위조 서명, 만료, 잘못된 발급자·대상·역할·사용자 ID, 무토큰 거부 시험: 통과.
 - API 시험: 서버 UUID 생성, 지정 UUID, 서버 확인 owner_id, 내 목록, 개별 조회·수정·삭제,
   삭제 후 404, 중복 ID 충돌, 잘못된 입력 거부, A/B 상대 메모 조회·수정·삭제 거부,
@@ -129,7 +142,10 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 - 4단계 제작 2 배포의 실제 A/B 브라우저 CRUD: 사용자 확인 완료.
 - 제작 3 적용 후 DB 재조회: RLS 활성화, 본인 행 정책 4개, 최소 권한 일치, A 3건·B 1건 보존.
 - 제작 3 적용 후 anon 직접 Data API 조회: HTTP 401, 42501 권한 거부, 메모 반환 없음.
-- 제작 3 적용 후 브라우저 CRUD 재확인은 별도이며 실제 A/B 교차 요청도 미실행입니다.
+- 4단계 심판: 조건 6개 충족, 최종 90점(사용자 확인).
+- 5단계 권한 회수 후 DB 조회: 두 역할의 직접 권한 없음, 서버 CRUD 유지, RLS와 정책 4개 유지, A 3건·B 1건 보존.
+- 5단계 적용 후 실제 A/B 브라우저 CRUD 및 사용자 토큰을 이용한 교차 요청은 아직 미실행입니다.
+  앞 단계 사용자 확인과 로컬 시험을 이번 실제 브라우저 검증으로 대신 기록하지 않습니다.
 - 브라우저 자동 검증은 실행 환경 준비 실패로 미실행입니다.
 - 현재 파일 31개 검색: 기존 가상 메모 본문·비밀값 일치 0건.
 - Supabase 보안 점검: RLS 정책 없음 INFO는 해소됐습니다.
@@ -138,12 +154,13 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 
 ## 저장점과 제출
 
-이 변경은 「4단계 저장점」 커밋입니다. 배포 커밋을 확인한 뒤 npm run bundle로
+이 변경은 「5단계 저장점」 커밋입니다. 배포 커밋을 확인한 뒤 npm run bundle로
 현재 커밋의 제출 묶음 artifacts/submission.json을 생성합니다.
 제출 주소는 위 Production 주소이며 심판에게 전할 내용은 선택 사항입니다.
-자기 점검은 정적 자료, 무토큰 목록·추가·개별 조회·수정·삭제, 잘못된 토큰 조회를 실제 요청합니다.
+자기 점검은 정적 자료, 무토큰 목록·추가·개별 조회·수정·삭제, 잘못된 토큰 조회,
+공개 키로 원본 메모 테이블 GET·PATCH 거부를 실제 요청하는 9개 점검입니다.
 실제 HTTP 상태와 자료 없는 오류 여부만 기록하며 토큰·메모 본문은 묶음에 넣지 않습니다.
 만료·위조·다른 대상 토큰의 로컬 시험은 실제 심판 판정으로 기록하지 않습니다.
 bundle-notes.json과 artifacts/submission.json은 Git에서 제외합니다.
-이전 단계 제출 묶음은 현재 4단계의 증거가 아니므로 최종 저장점에서 새 묶음을 생성합니다.
+이전 단계 제출 묶음은 현재 5단계의 증거가 아니므로 최종 저장점에서 새 묶음을 생성합니다.
 심판 점수는 포털에 제출한 뒤 확인합니다. src/decider.mjs와 src/detect.mjs는 보존합니다.
