@@ -1,0 +1,133 @@
+(() => {
+  'use strict';
+  // Project URL과 publishable key는 공개용입니다. 서버 전용 키는 사용하지 않습니다.
+  const projectUrl = 'https://nsqtwulghnijprefvfud.supabase.co';
+  const publishableKey = 'sb_publishable_9ohhX0Y5CQoKTfsNg7BsBQ_R0qaBGpb';
+  const form = document.querySelector('#login-form');
+  const email = document.querySelector('#email');
+  const password = document.querySelector('#password');
+  const loginButton = document.querySelector('#login-button');
+  const logoutButton = document.querySelector('#logout-button');
+  const state = document.querySelector('#auth-state');
+  const message = document.querySelector('#auth-message');
+  const section = document.querySelector('#notes-section');
+  const list = document.querySelector('#notes');
+  let client;
+  let currentSession = null;
+  let requestVersion = 0;
+  let pendingRequest;
+
+  function errorReason(error) {
+    // 서버 오류 원문에 포함될 수 있는 민감한 정보 대신 알려진 원인만 표시합니다.
+    if (error?.code === 'invalid_credentials') return '이메일 또는 비밀번호가 올바르지 않습니다.';
+    if (error?.code === 'email_not_confirmed') return '이메일 인증이 완료되지 않았습니다. 계정의 인증 상태를 확인해 주세요.';
+    if (error?.code === 'email_provider_disabled') return '이 프로젝트에서 이메일 로그인이 꺼져 있습니다.';
+    if (error?.status === 429) return '요청이 많습니다. 잠시 기다린 뒤 다시 시도해 주세요.';
+    if (error?.name === 'AuthRetryableFetchError' || error instanceof TypeError) {
+      return '인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.';
+    }
+    return '인증 요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  function setBusy(busy) {
+    loginButton.disabled = busy;
+    logoutButton.disabled = busy;
+  }
+
+  async function loadNotes(session, version) {
+    pendingRequest = new AbortController();
+    const request = pendingRequest;
+    const item = document.createElement('li');
+    item.textContent = '가상 자료를 불러오는 중입니다.';
+    list.replaceChildren(item);
+    try {
+      const response = await fetch('/api/notes', {
+        cache: 'no-store', signal: request.signal,
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!response.ok) throw new Error('notes_unavailable');
+      const data = await response.json();
+      if (!Array.isArray(data.notes)) throw new Error('invalid_notes');
+      if (version !== requestVersion || !currentSession) return;
+      list.replaceChildren(...data.notes.map(note => {
+        const row = document.createElement('li');
+        const title = document.createElement('strong');
+        const content = document.createElement('span');
+        title.textContent = note.title;
+        content.textContent = note.content;
+        row.append(title, content);
+        return row;
+      }));
+    } catch {
+      if (request.signal.aborted || version !== requestVersion || !currentSession) return;
+      item.textContent = '자료를 불러올 수 없습니다. 잠시 후 새로고침해 주세요.';
+      list.replaceChildren(item);
+    }
+  }
+
+  function renderSession(session) {
+    currentSession = session;
+    const version = ++requestVersion;
+    pendingRequest?.abort();
+    list.replaceChildren();
+    form.hidden = Boolean(session);
+    logoutButton.hidden = !session;
+    section.hidden = !session;
+    state.textContent = session ? '로그인했습니다.' : '로그인이 필요합니다.';
+    password.value = '';
+    if (session) void loadNotes(session, version);
+  }
+
+  try {
+    client = window.supabase.createClient(projectUrl, publishableKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    });
+    // 콜백 안에서 다른 Auth 메서드를 기다리지 않습니다.
+    client.auth.onAuthStateChange((_event, session) => {
+      message.textContent = '';
+      renderSession(session);
+    });
+  } catch {
+    state.textContent = '로그인 화면을 준비하지 못했습니다.';
+    message.textContent = '페이지를 새로고침해 주세요. 문제가 계속되면 SDK 배포 상태를 확인해 주세요.';
+    return;
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (loginButton.disabled) return;
+    setBusy(true);
+    message.textContent = '';
+    try {
+      const { data, error } = await client.auth.signInWithPassword({
+        email: email.value.trim(), password: password.value,
+      });
+      if (error) message.textContent = errorReason(error);
+      else if (!data.session) message.textContent = '로그인 세션을 만들지 못했습니다. 다시 시도해 주세요.';
+    } catch (error) {
+      message.textContent = errorReason(error);
+    } finally {
+      password.value = '';
+      setBusy(false);
+    }
+  });
+
+  logoutButton.addEventListener('click', async () => {
+    if (logoutButton.disabled) return;
+    setBusy(true);
+    message.textContent = '';
+    try {
+      const { error } = await client.auth.signOut({ scope: 'local' });
+      if (error) message.textContent = errorReason(error);
+      else {
+        renderSession(null);
+        message.textContent = '로그아웃했습니다.';
+        email.focus();
+      }
+    } catch (error) {
+      message.textContent = errorReason(error);
+    } finally {
+      setBusy(false);
+    }
+  });
+})();

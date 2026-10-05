@@ -19,6 +19,12 @@ if (config.step === 2 && (data.notes.length !== 0
 }
 await mkdir(resolve(root, 'public'), { recursive: true });
 await copyFile(source, output);
+// package-lock.json에 고정된 공식 SDK만 브라우저에 제공합니다.
+await mkdir(resolve(root, 'public/vendor'), { recursive: true });
+await copyFile(resolve(root, 'node_modules/@supabase/supabase-js/dist/umd/supabase.js'),
+  resolve(root, 'public/vendor/supabase.js'));
+await copyFile(resolve(root, 'node_modules/@supabase/supabase-js/LICENSE'),
+  resolve(root, 'public/vendor/supabase-LICENSE.txt'));
 console.log(config.step === 2 ? '메모가 없는 public/data.json을 생성했습니다.'
   : '실습용 공개 자료를 public/data.json에 복사했습니다.');
 if (!process.argv.includes('--local')) {
