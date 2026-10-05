@@ -78,4 +78,34 @@ begin
   end if;
 end $$;
 
+-- 의도한 차단과 서버 권한 유지가 확인되지 않으면 전체 변경을 취소합니다.
+do $$
+declare
+  role_name text;
+  privilege_name text;
+begin
+  foreach role_name in array array['anon', 'authenticated'] loop
+    foreach privilege_name in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE',
+                                          'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'] loop
+      if has_table_privilege(role_name, 'public.notes', privilege_name) then
+        raise exception 'Direct access privilege remains: % %', role_name, privilege_name;
+      end if;
+    end loop;
+    -- 테이블 권한과 별개인 열 단위 GRANT가 남아 있어도 중단합니다.
+    foreach privilege_name in array array['SELECT', 'INSERT', 'UPDATE', 'REFERENCES'] loop
+      if has_any_column_privilege(role_name, 'public.notes', privilege_name) then
+        raise exception 'Column privilege remains: % %', role_name, privilege_name;
+      end if;
+    end loop;
+  end loop;
+  foreach privilege_name in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE'] loop
+    if not has_table_privilege('service_role', 'public.notes', privilege_name) then
+      raise exception 'Required server privilege missing: %', privilege_name;
+    end if;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'public.notes'::regclass) then
+    raise exception 'Expected existing RLS protection is disabled.';
+  end if;
+end $$;
+
 commit;

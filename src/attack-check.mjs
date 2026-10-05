@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
-export async function runAttackChecks(config) {
+export async function runAttackChecks(config, { requirePass = false } = {}) {
+  // 성공 여부는 응답에서 판정한 boolean으로만 결정합니다. 제출용 문구는 판정에 쓰지 않습니다.
+  const finish = (attempts, passed) => {
+    if (requirePass) {
+      const failed = attempts.filter((_, index) => passed[index] !== true);
+      if (failed.length) throw new Error(`실제 배포 자기 점검 실패: ${failed.map(item => item.attackId).join(', ')}`);
+    }
+    return attempts;
+  };
   if (![1, 2, 3, 4, 5].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
@@ -28,6 +36,7 @@ export async function runAttackChecks(config) {
       expected: '현재 공개 data.json에는 빈 notes 배열만 있음',
       observed: empty ? 'HTTP 200, 메모 0건과 1단계 확인 표시 없음 확인'
         : `정적 자료 제거 확인 실패 (HTTP ${response.status})` }];
+    const passed = [empty];
     for (const check of [
       { attackId: 'anonymous_note_read', method: 'GET' },
       { attackId: 'anonymous_note_create', method: 'POST' },
@@ -49,6 +58,7 @@ export async function runAttackChecks(config) {
       attempts.push({ attackId: check.attackId, expected: '유효한 로그인 없이 메모 접근 거부',
         observed: denied ? 'HTTP 401, 메모 없는 오류 응답 확인'
           : `인증 거부 확인 실패 (HTTP ${api.status})` });
+      passed.push(denied);
     }
     if (config.step >= 5) {
       if (config.originalApiUrl !== new URL('/rest/v1/notes', config.identityProvider.issuer).href) {
@@ -76,9 +86,10 @@ export async function runAttackChecks(config) {
           expected: '공개 키만으로 원본 메모 테이블 직접 접근 거부',
           observed: denied ? `HTTP ${direct.status}, DB 권한 거부 확인; 자료·키 기록 없음`
             : `원본 권한 거부 확인 실패 (HTTP ${direct.status})` });
+        passed.push(denied);
       }
     }
-    return attempts;
+    return finish(attempts, passed);
   }
   if (config.step === 2) {
     let empty = false;
@@ -98,14 +109,14 @@ export async function runAttackChecks(config) {
       valid = api.ok && data?.sampleMarker === config.sampleMarker && noteCount === 4
         && data.notes.every(note => typeof note.title === 'string' && typeof note.content === 'string');
     } catch { /* 오류 응답 본문은 제출하지 않습니다. */ }
-    return [
+    return finish([
       { attackId: 'static_note_seed_read', expected: '현재 공개 data.json에는 메모와 1단계 확인 표시가 없음',
         observed: empty ? '비로그인 HTTP 200, 메모 0건과 1단계 확인 표시 없음 확인'
           : `정적 메모·확인 표시 제거 확인 실패 (HTTP ${response.status})` },
       { attackId: 'anonymous_server_api_read', expected: '2단계의 남은 약점: 공개 API가 가상 메모 네 건을 반환',
         observed: valid ? '비로그인 공개 API에서 가상 메모 4건 확인; 인증은 다음 단계 과제'
           : `가상 메모 네 건 확인 실패 (HTTP ${api.status}, 자료 ${noteCount}건)` },
-    ];
+    ], [empty, valid]);
   }
   let visible = false;
   if (response.ok) {
@@ -117,6 +128,6 @@ export async function runAttackChecks(config) {
       // A non-JSON response is a failed check, not a successful deployment.
     }
   }
-  return [{ attackId: 'anonymous_note_read', expected: '비로그인 화면에서 가상 메모를 확인',
-    observed: visible ? '비로그인 요청에서 공개 가상 메모 확인 표시가 보임' : `비로그인 요청에서 확인 표시가 보이지 않음 (HTTP ${response.status})` }];
+  return finish([{ attackId: 'anonymous_note_read', expected: '비로그인 화면에서 가상 메모를 확인',
+    observed: visible ? '비로그인 요청에서 공개 가상 메모 확인 표시가 보임' : `비로그인 요청에서 확인 표시가 보이지 않음 (HTTP ${response.status})` }], [visible]);
 }

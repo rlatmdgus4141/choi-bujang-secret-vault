@@ -6,7 +6,7 @@
 - 브랜치: defense-r5
 - 배포: https://choi-bujang-secret-vault-rosy.vercel.app
 - Supabase: choi-bujang-secret-vault
-- 이전 결과: 1단계 100점, 2단계 90점, 3단계 90점, 4단계 90점 방어 성공(사용자 확인).
+- 이전 결과: 1단계 100점, 2~4단계 각 90점. 5단계 첫 제출은 조건 7개 충족, 완결성 가점 1개, 80점(사용자 확인).
 - 사용자가 5단계 권한 회수 SQL을 검토·실행했습니다. 실제 DB에서 두 역할의 직접 권한 회수와 서버 CRUD 권한 보존을 확인했습니다.
 
 Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 제공합니다.
@@ -15,7 +15,7 @@ Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 제공합니�
 비밀번호는 공식 SDK에 전달한 뒤 입력창에서 지우며 직접 저장·기록하지 않습니다.
 세션 저장과 갱신은 SDK에 맡기고 JWT를 화면·로그·Git·제출 묶음에 출력하지 않습니다.
 
-## 5단계 변경
+## 5단계 변경 및 검증 보완
 
 브라우저의 Supabase 직접 메모 호출은 없습니다. Auth 호출은 유지하며
 메모 읽기·추가·수정·삭제는 모두 /api/notes와 /api/notes/:id를 사용합니다.
@@ -25,6 +25,8 @@ public.notes의 PUBLIC·anon·authenticated 직접 테이블 권한을 회수했
 aleph.config.json과 배포 식별 정보의 originalApiUrl에 쿼리 없는 HTTPS 경로를 기록합니다.
 Project URL과 publishable key는 Auth에 필요한 공개 설정이며 서버 전용 키는 브라우저에 없습니다.
 서버 키, 원본 로그인 검증 도우미, API 소유자 검사, Auth 설정은 변경하지 않았습니다.
+추가 보완은 점검 실패 시 제출 생성 중단, 배포 설정 전체 대조, DB 권한 점검의 재현성입니다.
+완결성 가점의 세부 채점 기준은 공개 자료에서 확인하지 못했으며 점수 상승을 보장하지 않습니다.
 
 ## 서버 인증과 메모 API
 
@@ -85,6 +87,11 @@ anon과 authenticated 모두 테이블 직접 접근을 거부합니다.
 DB의 구조와 권한은 supabase/schema.sql에 있으며 메모 본문·실제 키는 포함하지 않습니다.
 새 프로젝트에서 이 파일로 구조를 재현할 수 있습니다. 기존 내용을 덮어쓰거나 삭제하지 않습니다.
 이 SQL은 기존 메모의 소유자를 자동 변경하지 않습니다.
+이미 운영 중인 4단계 DB에는 전체 구조 SQL 대신 supabase/stage5-lockdown.sql을 검토 후 적용합니다.
+이 파일은 사용자가 이미 실행한 5단계 권한 회수 SQL과 같습니다. 이번 보완에서는 다시 적용하지 않았습니다.
+권한 확인만 하려면 읽기 전용 supabase/verify-stage5.sql을 실행합니다.
+테이블 권한뿐 아니라 열 단위 권한의 잔존 여부와 서버 CRUD 권한도 확인합니다.
+schema.sql에도 같은 검증을 넣어 열 권한이 남은 채 설정 완료로 처리되지 않게 했습니다.
 
 ## API 검사와 DB 정책
 
@@ -110,9 +117,13 @@ npm ci
 npm run build -- --local
 npm test
 npm run check:stage2 -- --deployed
+# 커밋과 배포가 일치한 다음 실행
+npm run bundle
 ```
 
 check:stage2라는 명령 이름을 유지하며, 현재 단계의 정적 메모·비밀값 노출과 배포 커밋을 확인합니다.
+배포 식별 정보의 step·repoUrl·commit·identityProvider·allowedRoutes·originalApiUrl을 대조합니다.
+제출 생성에도 같은 대조를 적용하고, 실제 요청 점검이 하나라도 실패하면 성공한 제출 묶음을 만들지 않습니다.
 로컬 빌드는 정적 산출물 생성이며 실제 API 실행이나 배포 성공의 증거가 아닙니다.
 서버 환경변수 이름은 .env.example에 빈 값으로 제공합니다.
 SUPABASE_URL과 SUPABASE_SECRET_KEY는 Vercel Settings → Environment Variables의
@@ -130,7 +141,7 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 ## 검증 기록
 
 - 제작 1 로그인·로그아웃, 제작 2 서버 인증 후 네 메모 표시: 사용자 화면 확인 완료.
-- 5단계 로컬 빌드와 회귀·인증·CRUD·소유자·원본 점검 시험 총 19개: 통과.
+- 5단계 로컬 빌드와 회귀·인증·CRUD·소유자·원본 점검 시험 총 23개: 통과.
 - 정상 서명, 위조 서명, 만료, 잘못된 발급자·대상·역할·사용자 ID, 무토큰 거부 시험: 통과.
 - API 시험: 서버 UUID 생성, 지정 UUID, 서버 확인 owner_id, 내 목록, 개별 조회·수정·삭제,
   삭제 후 404, 중복 ID 충돌, 잘못된 입력 거부, A/B 상대 메모 조회·수정·삭제 거부,
@@ -147,14 +158,16 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 - 5단계 적용 후 실제 A/B 브라우저 CRUD 및 사용자 토큰을 이용한 교차 요청은 아직 미실행입니다.
   앞 단계 사용자 확인과 로컬 시험을 이번 실제 브라우저 검증으로 대신 기록하지 않습니다.
 - 브라우저 자동 검증은 실행 환경 준비 실패로 미실행입니다.
-- 현재 파일 31개 검색: 기존 가상 메모 본문·비밀값 일치 0건.
+- 현재 파일 검색: 기존 가상 메모 본문·비밀값 일치 0건. 파일 수는 검사 명령의 출력으로 확인합니다.
+- 읽기 전용 DB 확인: stage5_permissions_ok=true, 직접 테이블·열 접근 차단, 서버 CRUD 유지, 메모 4건·정책 4개.
+- 수행한 검증과 남은 수동 확인은 docs/STAGE5_VERIFICATION.md에 구분했습니다.
 - Supabase 보안 점검: RLS 정책 없음 INFO는 해소됐습니다.
   Auth 유출 비밀번호 검사 비활성화 WARN 1건은 별도 Auth 설정으로 남아 있습니다.
   안내: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
 ## 저장점과 제출
 
-이 변경은 「5단계 저장점」 커밋입니다. 배포 커밋을 확인한 뒤 npm run bundle로
+기준 저장점은 「5단계 저장점」이며 이번 보완 커밋은 「5단계 검증·재현성 보완」입니다. 배포 커밋을 확인한 뒤 npm run bundle로
 현재 커밋의 제출 묶음 artifacts/submission.json을 생성합니다.
 제출 주소는 위 Production 주소이며 심판에게 전할 내용은 선택 사항입니다.
 자기 점검은 정적 자료, 무토큰 목록·추가·개별 조회·수정·삭제, 잘못된 토큰 조회,
@@ -163,4 +176,4 @@ A 로그인에는 기존 메모 세 건, B 로그인에는 한 건과 메모 입
 만료·위조·다른 대상 토큰의 로컬 시험은 실제 심판 판정으로 기록하지 않습니다.
 bundle-notes.json과 artifacts/submission.json은 Git에서 제외합니다.
 이전 단계 제출 묶음은 현재 5단계의 증거가 아니므로 최종 저장점에서 새 묶음을 생성합니다.
-심판 점수는 포털에 제출한 뒤 확인합니다. src/decider.mjs와 src/detect.mjs는 보존합니다.
+첫 제출 점수는 80점입니다. 보완 후 점수는 재제출 판정으로 확인합니다. src/decider.mjs와 src/detect.mjs는 보존합니다.

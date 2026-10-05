@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertDeploymentMetadata } from './verify-deployment.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' });
@@ -43,9 +44,11 @@ if (process.argv.includes('--deployed')) {
     if (path === '/aleph.json') {
       try {
         const identity = JSON.parse(text);
-        if (identity.step !== config.step || identity.repoUrl !== config.repoUrl
-            || identity.commit !== git('rev-parse', 'HEAD').trim()) failures++;
-      } catch { failures++; }
+        assertDeploymentMetadata(identity, config, git('rev-parse', 'HEAD').trim());
+      } catch (error) {
+        console.error(error instanceof SyntaxError ? '배포 식별 정보가 올바른 JSON이 아닙니다.' : error.message);
+        failures++;
+      }
     }
   }
 }
