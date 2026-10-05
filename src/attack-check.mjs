@@ -31,8 +31,11 @@ export async function runAttackChecks(config) {
       { attackId: 'anonymous_note_read', method: 'GET' },
       { attackId: 'anonymous_note_create', method: 'POST' },
       { attackId: 'malformed_login_token', method: 'GET', headers: { Authorization: 'Bearer invalid' } },
+      { attackId: 'anonymous_item_read', method: 'GET', path: '/api/notes/00000000-0000-4000-8000-000000000000' },
+      { attackId: 'anonymous_item_update', method: 'PUT', path: '/api/notes/00000000-0000-4000-8000-000000000000' },
+      { attackId: 'anonymous_item_delete', method: 'DELETE', path: '/api/notes/00000000-0000-4000-8000-000000000000' },
     ]) {
-      const api = await fetch(new URL('/api/notes', app), {
+      const api = await fetch(new URL(check.path ?? '/api/notes', app), {
         method: check.method, headers: check.headers, redirect: 'error',
         signal: AbortSignal.timeout(15000),
       });

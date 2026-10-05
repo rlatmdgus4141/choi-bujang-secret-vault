@@ -46,7 +46,11 @@ function fixture({ failDb = false, claimPatch } = {}) {
         assert.equal(table, 'notes');
         return { select(fields) {
           assert.equal(fields, 'id,title,content');
-          return { async order(column) {
+          return { eq(column, value) {
+            assert.equal(column, 'owner_id');
+            assert.equal(value, userId);
+            return this;
+          }, async order(column) {
             assert.equal(column, 'position');
             return failDb ? { data: null, error: new Error(key) }
               : { data: [{ id: userId, title: 'fixture', content: 'test-only', extra: key }], error: null };
@@ -80,8 +84,8 @@ test('valid signed student login reads only allowed fields and reuses the verifi
     await handler(request(authorization), res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers.Vary, 'Authorization');
-    assert.equal(res.body.notes.length, 1);
-    assert.deepEqual(Object.keys(res.body.notes[0]).sort(), ['content', 'id', 'title']);
+    assert.equal(res.body.length, 1);
+    assert.deepEqual(Object.keys(res.body[0]).sort(), ['body', 'id', 'title']);
     assert.equal(JSON.stringify(res.body).includes(key), false);
   }
   assert.deepEqual(calls, { reads: 2, claims: 2, clients: 1 });
@@ -125,9 +129,9 @@ test('configuration errors, database failures and authenticated unsupported meth
   assert.equal(res.statusCode, 502);
   assert.equal(JSON.stringify(res.body).includes(key), false);
   const post = response();
-  await handler(request(authorization, 'POST'), post);
+  await handler(request(authorization, 'PATCH'), post);
   assert.equal(post.statusCode, 405);
-  assert.equal(post.headers.Allow, 'GET');
+  assert.equal(post.headers.Allow, 'GET, POST');
 });
 
 test('unchanged helper validates signed judge identity and rejects expiry, forged signature and wrong service', async () => {
@@ -171,7 +175,7 @@ test('stage 3 self-check records actual rejection requests without token or note
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 7);
     assert.equal(calls[2].options.method, 'POST');
     assert.ok(checks.slice(1).every(check => check.observed.includes('HTTP 401')));
     assert.equal(JSON.stringify(checks).includes('Bearer'), false);
@@ -179,4 +183,107 @@ test('stage 3 self-check records actual rejection requests without token or note
     const failed = await runAttackChecks(config);
     assert.ok(failed.every(check => check.observed.includes('확인 실패')));
   } finally { globalThis.fetch = original; }
+});
+
+function crudFixture() {
+  const rows = new Map();
+  const clientFactory = () => ({
+    auth: { async getClaims(value) {
+      try { return { data: { claims: (await jwtVerify(value, pair.publicKey)).payload }, error: null }; }
+      catch { return { data: null, error: new Error('invalid fixture') }; }
+    } },
+    from() {
+      let action = 'read'; let input; let fields; const filters = [];
+      const execute = () => {
+        const matched = [...rows.values()].filter(row => filters.every(([k, v]) => row[k] === v));
+        let data = matched;
+        if (action === 'insert') {
+          if (rows.has(input.id)) return { data: null, error: { code: '23505' } };
+          const row = { ...input, position: rows.size + 1 };
+          rows.set(row.id, row); data = [row];
+        }
+        if (action === 'update') data = matched.map(row => {
+          const changed = { ...row, ...input }; rows.set(row.id, changed); return changed;
+        });
+        if (action === 'delete') matched.forEach(row => rows.delete(row.id));
+        return { data: data.map(row => Object.fromEntries(fields.split(',').map(field => [field, row[field]]))), error: null };
+      };
+      const builder = {
+        select(value) { fields = value; return this; },
+        insert(value) { action = 'insert'; input = value; return this; },
+        update(value) { action = 'update'; input = value; return this; },
+        delete() { action = 'delete'; return this; },
+        eq(k, v) { filters.push([k, v]); return this; },
+        async order() { return execute(); },
+        async maybeSingle() { const r = execute(); return { ...r, data: r.data?.[0] ?? null }; },
+        async single() { return this.maybeSingle(); },
+      };
+      return builder;
+    },
+  });
+  const root = createNotesHandler({ env, clientFactory });
+  const item = createNotesHandler({ env, clientFactory, itemRoute: true });
+  return { rows, async call(method, bearer, body, id) {
+    const res = response();
+    await (id === undefined ? root : item)({ method, headers: { authorization: bearer }, body,
+      query: id === undefined ? {} : { id } }, res);
+    return res;
+  } };
+}
+
+test('A CRUD follows the contract, preserves verified ownership, and returns 404 after deletion', async () => {
+  const { call, rows } = crudFixture();
+  const bearer = `Bearer ${await token()}`;
+  const input = { title: 'fixture', body: 'test-only', owner_id: 'untrusted', userId: 'untrusted', role: 'admin' };
+  const created = await call('POST', bearer, input);
+  assert.equal(created.statusCode, 201);
+  const id = created.body.id;
+  assert.match(id, /^[0-9a-f-]{36}$/u);
+  assert.equal(rows.get(id).owner_id, userId);
+  assert.deepEqual(Object.keys(created.body), ['id']);
+  const list = await call('GET', bearer);
+  assert.deepEqual(list.body, [{ id, title: input.title, body: input.body }]);
+  assert.deepEqual((await call('GET', bearer, undefined, id)).body, list.body[0]);
+  const edited = await call('PUT', bearer, { title: 'updated', body: 'changed', owner_id: 'untrusted' }, id);
+  assert.equal(edited.statusCode, 200);
+  assert.equal(edited.body.body, 'changed');
+  assert.equal(rows.get(id).owner_id, userId);
+  assert.equal((await call('DELETE', bearer, undefined, id)).statusCode, 200);
+  assert.equal((await call('GET', bearer, undefined, id)).statusCode, 404);
+  assert.equal((await call('PUT', bearer, { title: 'gone', body: '' }, id)).statusCode, 404);
+  assert.equal((await call('DELETE', bearer, undefined, id)).statusCode, 404);
+});
+
+test('explicit UUID works, duplicate insert cannot overwrite, and malformed input is rejected', async () => {
+  const { call, rows } = crudFixture();
+  const bearer = `Bearer ${await token()}`;
+  const input = { id: '33333333-3333-4333-8333-333333333333', title: 'fixture', body: 'test-only' };
+  assert.equal((await call('POST', bearer, input)).statusCode, 201);
+  assert.equal((await call('POST', bearer, { ...input, title: 'overwrite' })).statusCode, 409);
+  assert.equal(rows.get(input.id).title, input.title);
+  for (const body of [null, [], '{', { ...input, id: 'bad' }, { ...input, title: ' ' },
+    { ...input, body: 1 }, { ...input, body: 'x'.repeat(20001) }]) {
+    assert.equal((await call('POST', bearer, body)).statusCode, 400);
+  }
+  assert.equal((await call('GET', bearer, undefined, 'bad-id')).statusCode, 400);
+  assert.equal(rows.size, 1);
+});
+
+test('all item operations require authentication; list is own-only but B item access remains for stage 4', async () => {
+  const { call, rows } = crudFixture();
+  const a = `Bearer ${await token()}`;
+  const b = `Bearer ${await token({ sub: '22222222-2222-4222-8222-222222222222' })}`;
+  const created = await call('POST', a, { title: 'fixture', body: 'test-only' });
+  const id = created.body.id;
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    const res = await call(method, undefined, { title: 'untrusted', body: '' }, id);
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(Object.keys(res.body), ['error']);
+  }
+  assert.equal(rows.get(id).title, 'fixture');
+  assert.deepEqual((await call('GET', b)).body, []);
+  assert.equal((await call('GET', b, undefined, id)).statusCode, 200);
+  assert.equal((await call('PUT', b, { title: 'B fixture', body: '' }, id)).statusCode, 200);
+  assert.equal(rows.get(id).owner_id, userId);
+  assert.equal((await call('DELETE', b, undefined, id)).statusCode, 200);
 });

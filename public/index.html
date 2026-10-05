@@ -19,8 +19,12 @@
     [hidden] { display: none !important; }
     .auth { padding: 22px; border: 1px solid #51667c; border-radius: 14px; background: #1a2a3d; }
     label { display: block; margin: 14px 0 6px; }
-    input, button { box-sizing: border-box; font: inherit; border-radius: 8px; padding: 12px; }
-    input { width: 100%; border: 1px solid #72869d; background: #101a28; color: #ecf4ff; }
+    input, textarea, button { box-sizing: border-box; font: inherit; border-radius: 8px; padding: 12px; }
+    input, textarea { width: 100%; border: 1px solid #72869d; background: #101a28; color: #ecf4ff; }
+    textarea { min-height: 120px; resize: vertical; }
+    li span { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .secondary { background: #bfcee0; }
     button { margin-top: 16px; border: 0; background: #8ad8df; color: #101a28; font-weight: 700; cursor: pointer; }
     button:disabled { opacity: .55; cursor: wait; }
     :focus-visible { outline: 3px solid #f4cb6b; outline-offset: 3px; }
@@ -29,10 +33,10 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 제작 2</div>
+    <div class="eyebrow">BYTE BACK · 3단계 진짜 로그인</div>
     <h1>내 자료실</h1>
     <p>실습용 계정으로 로그인하세요. 메모에는 가상 자료만 사용합니다.</p>
-    <div class="notice">로그인한 계정만 메모를 조회할 수 있습니다. 현재는 학습용 공통 메모를 표시합니다.</div>
+    <div class="notice">내 가상 메모를 추가하고 수정·삭제할 수 있습니다. 개인 메모의 소유자 검사는 다음 단계에서 적용합니다.</div>
     <section class="auth" aria-labelledby="auth-heading">
       <h2 id="auth-heading">로그인</h2>
       <p id="auth-state" role="status">로그인 상태를 확인하는 중입니다.</p>
@@ -47,7 +51,19 @@
       <p id="auth-message" role="alert"></p>
     </section>
     <section id="notes-section" hidden aria-labelledby="notes-heading">
-      <h2 id="notes-heading">가상 메모</h2>
+      <h2 id="notes-heading">내 가상 메모</h2>
+      <form id="note-form" class="auth">
+        <h3 id="editor-heading">새 메모</h3>
+        <label for="note-title">제목</label>
+        <input id="note-title" maxlength="200" required>
+        <label for="note-body">내용</label>
+        <textarea id="note-body" maxlength="20000"></textarea>
+        <div class="actions">
+          <button id="save-note" type="submit">메모 추가</button>
+          <button id="cancel-edit" class="secondary" type="button" hidden>수정 취소</button>
+        </div>
+      </form>
+      <p id="note-message" role="status"></p>
       <ul id="notes" aria-live="polite"></ul>
     </section>
     <noscript><p>로그인하려면 브라우저의 JavaScript를 켜 주세요.</p></noscript>

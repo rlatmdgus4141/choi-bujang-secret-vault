@@ -26,5 +26,10 @@ export function deploymentIdentity(env, config) {
     publicAppUrl: `https://${host.toLowerCase()}`,
     judgeIssuer: config.judgeIssuer,
     sampleMarker: config.sampleMarker,
+    ...(config.step >= 3 ? {
+      identityProvider: { issuer: config.identityProvider.issuer,
+        audience: config.identityProvider.audience, jwksUrl: config.identityProvider.jwksUrl },
+      allowedRoutes: config.allowedRoutes.map(({ method, path }) => ({ method, path })),
+    } : {}),
   };
 }
