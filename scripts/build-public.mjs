@@ -14,8 +14,8 @@ if (!Array.isArray(data.notes)) {
   throw new Error('실습용 공개 자료 형식을 확인하세요. 실제 학생 자료를 넣으면 안 됩니다.');
 }
 if (config.step === 2 && (data.notes.length !== 0
-    || Object.keys(data).some(key => !['sampleMarker', 'notes'].includes(key)))) {
-  throw new Error('2단계 data.json에는 확인 표시와 빈 notes 배열만 둘 수 있습니다.');
+    || Object.keys(data).some(key => key !== 'notes'))) {
+  throw new Error('2단계 data.json에는 빈 notes 배열만 둘 수 있습니다. 1단계 확인 표시도 제거하세요.');
 }
 await mkdir(resolve(root, 'public'), { recursive: true });
 await copyFile(source, output);

@@ -12,7 +12,8 @@ const files = [...new Set(git('ls-files', '--cached', '--others', '--exclude-sta
 let failures = 0;
 for (const path of files) {
   const text = readFileSync(resolve(root, path), 'utf8');
-  if (patterns.some(pattern => text.includes(pattern)) || secret.test(text)) {
+  const staticMarker = ['data.json', 'public/data.json'].includes(path) && text.includes(seed.sampleMarker);
+  if (patterns.some(pattern => text.includes(pattern)) || secret.test(text) || staticMarker) {
     console.error(`확인 필요: ${path}`);
     failures++;
   }
@@ -35,8 +36,10 @@ if (process.argv.includes('--deployed')) {
     const text = path === '/' ? html : await res.text();
     const matches = patterns.filter(pattern => text.includes(pattern)).length;
     const exposedSecret = secret.test(text);
+    const staticMarker = path === '/data.json' && text.includes(seed.sampleMarker);
     console.log(`공개 정적 경로 ${path}: HTTP ${res.status}, 본문 일치 ${matches}건, 비밀값 일치 ${exposedSecret ? 1 : 0}건`);
-    if (!res.ok || matches || exposedSecret) failures++;
+    if (path === '/data.json') console.log(`1단계 확인 표시: ${staticMarker ? '남아 있음' : '없음'}`);
+    if (!res.ok || matches || exposedSecret || staticMarker) failures++;
     if (path === '/aleph.json') {
       try {
         const identity = JSON.parse(text);
