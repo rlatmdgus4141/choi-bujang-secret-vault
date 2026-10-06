@@ -1,54 +1,43 @@
 # BYTE BACK 방어전 자료실 R5
 
-## 현재 단계: 2단계 · 자료를 코드 밖으로 옮깁니다
+## 2단계 점수 보완용 저장점
 
-1단계는 r5-rc1의 커밋 0f9a3c9에서 시작했고 학생이 포털에서 100점을 확인했습니다.
-같은 저장소의 defense-r5 브랜치에서 이어갑니다.
+이 브랜치 `score-stage2`는 기존 2단계 저장점 `c0f9c3b`에서 분리했습니다.
+학생이 확인한 기존 2단계 점수는 90점이며, 재제출 결과는 심판이 판정합니다.
+5단계 작업을 이어가는 브랜치는 `defense-r5`입니다.
 
-- GitHub: https://github.com/rlatmdgus4141/choi-bujang-secret-vault
-- Production: https://choi-bujang-secret-vault-rosy.vercel.app
-- 학습용 Supabase 프로젝트: choi-bujang-secret-vault
+- 저장소: https://github.com/rlatmdgus4141/choi-bujang-secret-vault
+- 2단계 제출 주소: https://choi-bujang-secret-vault-stage2-rlatmdgus4141.vercel.app
+- 5단계 주소: https://choi-bujang-secret-vault-rosy.vercel.app
 
-가상 메모 네 건은 Supabase public.notes로 이전했습니다.
-owner_id uuid는 다음 단계용이며 auth.users 외래키는 없습니다.
-RLS를 켜고 PUBLIC, anon, authenticated의 테이블 권한을 제거했습니다.
-서버 역할 service_role에는 읽기 권한만 명시적으로 부여했습니다.
-자동 RLS 보조 함수의 공개 실행 권한도 제거하고 이벤트 트리거는 유지합니다.
-RLS 정책이 없는 것은 브라우저 역할의 직접 접근을 전부 거부하기 위한 의도입니다.
+## 현재 기능과 한계
 
-## 화면과 서버
+가상 메모 네 건은 학습 DB의 `public.notes`에 있습니다.
+첫 화면은 `GET /api/notes` 서버 함수에서 받은 자료를 카드로 표시합니다.
+서버 함수만 `SUPABASE_URL`과 서버 전용 `SUPABASE_SECRET_KEY`를 읽습니다.
+브라우저 파일·Git·응답·로그·제출 묶음에는 서버 키를 넣지 않습니다.
+화면은 메모 내용을 `textContent`로 표시합니다.
 
-public/index.html은 GET /api/notes를 통해 자료를 불러옵니다.
-api/notes.js는 Vercel 서버 함수이며 환경변수 SUPABASE_URL, SUPABASE_SECRET_KEY를 읽습니다.
-서버 전용 Secret API Key는 공식 설정 화면에서 Production 환경변수에 직접 입력합니다.
-키를 채팅, 코드, Git, 브라우저 파일, 응답, 로그, 제출 묶음에 넣지 않습니다.
-NEXT_PUBLIC_ 접두사는 사용하지 않습니다.
+2단계 API는 의도적으로 비로그인 읽기를 허용합니다. 가상 자료만 사용합니다.
+이 주소는 2단계 재현용이며 실제 개인정보와 실제 학생 자료를 넣으면 안 됩니다.
+로그인·소유자 검사와 메모 추가·수정·삭제는 5단계 주소에서 유지합니다.
+이 브랜치로 DB의 소유자·권한·정책·메모를 변경하지 않습니다.
 
-API는 아직 공개 주소이며 비로그인 방문자도 가상 메모 네 건을 읽을 수 있습니다.
-RLS는 서버 키가 사용하는 역할의 접근을 막지 않습니다.
-로그인·소유자 확인은 3단계에서 구현하므로 실제 개인정보와 실제 학생 자료는 넣지 않습니다.
-API는 필요한 자료 필드만 반환하고 DB 오류 상세와 환경변수는 반환·기록하지 않습니다.
-캐시는 no-store이며 GET 이외 요청은 HTTP 405로 거부합니다.
-키 누락·잘못된 키 유형은 HTTP 503, DB 연결 실패는 상세 없는 HTTP 502로 응답합니다.
+현재 공유 학습 DB는 5단계까지 적용된 상태입니다. RLS는 켜져 있으며,
+`PUBLIC`, `anon`, `authenticated`의 메모 테이블 직접 권한은 회수되어 있습니다.
+서버 역할은 기존 권한으로 자료를 읽습니다. 이 브랜치의 과거 스키마 SQL은
+2단계 설명 자료이므로 현재 공유 DB에 다시 실행하지 않습니다.
 
-루트와 public/data.json에는 빈 notes 배열만 남기며 1단계 확인 표시도 제거합니다.
-빌드는 2단계에서 메모·확인 표시·추가 필드가 들어간 data.json을 거부해 재노출을 방지합니다.
-public/aleph.json은 Vercel의 실제 저장소·커밋·배포 주소와 현재 단계를 기록합니다.
-judgeIssuer는 시작 틀의 운영 설정을 유지합니다.
+## 공개된 100점 가점 조건
 
-## SQL 보관과 실행
+1. `/data.json`에는 `{"notes":[]}`만 있고 메모와 1단계 표시가 없습니다.
+2. 빌드는 Vercel 시스템 환경변수로 `/aleph.json`을 자동 생성합니다.
+   실제 저장소·커밋·단계를 기록하며 빌드 과정에서 삭제하지 않습니다.
+3. `vercel.json`은 첫 화면을 포함한 응답에
+   `X-Content-Type-Options: nosniff`를 설정합니다.
 
-공개 가능한 구조·권한 SQL은 [supabase/schema.sql](supabase/schema.sql)에 있습니다.
-새 학습용 프로젝트의 SQL Editor에서 이 파일을 먼저 실행하면 테이블과 접근 권한을 재현할 수 있습니다.
-메모 본문과 실제 키는 포함하지 않으며 기존 메모를 삭제하거나 덮어쓰지 않습니다.
-현재 학습용 DB에는 같은 구조와 권한이 이미 적용되어 있습니다.
-
-메모 본문이 포함된 aleph_stage2_setup.sql은 Git 밖에서 따로 제공합니다.
-Supabase 연결 기능으로 이미 실행했으므로 SQL Editor에서 다시 실행할 필요는 없습니다.
-재실행이 필요하면 공식 SQL Editor에서 해당 파일을 실행합니다.
-위치가 같은 기존 행은 덮어쓰지 않습니다. 공개 저장소나 public에 SQL을 복사하지 않습니다.
-확인 결과: 메모 4건, owner_id uuid, RLS 활성화, 익명·로그인 역할 SELECT 불가,
-서버 역할 SELECT 가능, 외래키 0개.
+이 조건은 배포 후 실제 비로그인 HTTP 응답으로 확인합니다.
+설정 파일이나 로컬 테스트만으로 심판의 100점 판정을 주장하지 않습니다.
 
 ## 다시 실행하고 확인하기
 
@@ -59,61 +48,35 @@ npm test
 npm run check:stage2
 ```
 
-로컬 빌드는 정적 파일만 생성하며 API 실행이나 Vercel 배포를 증명하지 않습니다.
-필수 환경변수 이름은 [.env.example](.env.example)에 빈 값으로 제공합니다.
-실제 값은 Vercel 프로젝트 Settings → Environment Variables의 Production 환경에 입력합니다.
-SUPABASE_SECRET_KEY는 Secret 유형으로 저장합니다. 예시 파일에 실제 값을 적어 커밋하지 않습니다.
-실제 배포는 Vercel Production 브랜치 defense-r5를 사용합니다.
-서버 키가 없으면 자료 화면에 오류가 나므로 키 설정 후 배포해야 합니다.
+로컬 빌드는 정적 파일을 확인하며 서버 실행이나 실제 배포를 증명하지 않습니다.
+환경변수는 기존 Vercel 프로젝트의 Production 설정을 사용합니다.
+키는 공식 비밀 입력란에만 넣으며 채팅으로 요구하거나 출력하지 않습니다.
 
-배포 후 실행:
+배포 후 현재 커밋과 실제 HTTP 응답을 확인합니다.
 
 ```sh
 npm run check:stage2 -- --deployed
 npm run bundle
 ```
 
-첫 명령은 이전 공개 커밋에서 가상 메모 검색 문장을 메모리로 읽어,
-현재 작업 파일과 비로그인 배포의 /, /data.json, /aleph.json, 연결된 정적 JS/JSON에서 검색합니다.
-메모 본문·키는 출력하지 않고 일치 건수와 경로만 기록합니다.
-/aleph.json의 저장소·단계·커밋도 현재 HEAD와 대조합니다.
-현재 GitHub 파일은 git fetch origin defense-r5 뒤 원격 커밋이 HEAD와 같은지 확인합니다.
-정적 빌드 산출물은 비공개 패턴 파일을 사용해 rg로 같은 문장을 검색할 수 있습니다.
+시크릿 창에서 위의 2단계 주소를 열면 가상 메모 카드 네 건이 보여야 합니다.
+`/data.json`은 메모 0건, `/aleph.json`은 현재 단계 2와 커밋이 보여야 합니다.
+첫 화면의 응답 헤더는 개발자 도구 Network에서 확인합니다.
+`GET /api/notes`는 2단계의 남은 약점으로 비로그인 자료 조회를 허용합니다.
+GET 이외의 요청은 405, 서버 설정 누락은 503, DB 연결 실패는 상세 없는 502입니다.
 
-시크릿 창에서 /에 카드 네 건이 보이고 /data.json의 notes가 비어 있어야 합니다.
-/api/notes는 아직 비로그인 HTTP 200으로 가상 자료를 반환하는 남은 약점입니다.
-DB에 직접 접근하는 anon·authenticated 역할은 자료 읽기가 거부되어야 합니다.
-src/attack-check.mjs는 빈 정적 자료와 공개 API의 남은 약점을 실제 요청으로 각각 기록합니다.
-메모 본문은 제출 묶음에 넣지 않습니다. 학생의 자기 점검은 심판 판정이 아닙니다.
-
-## 검증 기록
-
-- 2단계 심판 결과: 필수 조건 4개 충족, 완결성 가점 2개, 90점 방어 성공(학생 확인).
-- 후속 보완: 메모 없는 공개 스키마 SQL, 빈 환경변수 예시, 통합 테스트 명령 추가.
-  이 보완의 추가 점수는 재제출 후 심판 결과로 확인합니다.
-- Supabase DB 이전과 권한 확인: 실행 완료.
-- 자동 RLS 보조 함수의 공개 실행 권한 제거 후 보안 점검: WARN 없음.
-- 로컬 빌드: 통과. 기존 테스트 2개와 2단계 테스트 5개: 모두 통과.
-- 현재 작업 파일 28개 검색: 메모 본문·비밀값 일치 0건.
-- SUPABASE_URL과 서버 키: Production 등록 확인.
-- GitHub 최신 커밋과 Production은 아래 검증 명령으로 대조합니다.
-- 실제 정적 자료·공개 API 요청 결과는 제출 묶음의 attackAttempts에 기록합니다.
-- 심판이 S02_MARKER_IN_STATIC을 보고해 정적 data.json의 1단계 표시를 제거했습니다.
-  자기 점검에도 표시 제거 조건과 재발 방지 시험을 추가했습니다. API와 DB는 유지합니다.
+`npm run check:stage2`는 이전 공개 커밋의 가상 메모 문장을 메모리로만 읽고,
+현재 소스·정적 배포 파일에서 검색합니다. 본문·키는 출력하지 않습니다.
+`src/attack-check.mjs`는 실제 정적 자료와 공개 서버 API 요청 결과만 기록합니다.
+자기 점검과 심판 판정은 구분합니다. `bundle-notes.json`과
+`artifacts/submission.json`은 Git에 넣지 않습니다.
 
 ## 과거 노출의 한계
 
-이번 단계는 현재 파일과 새 배포에서 메모 시드를 제거합니다.
-이전 공개 Git 커밋, 기존 Vercel 배포, 포크·캐시·내려받은 사본은 그대로 남을 수 있습니다.
-현재 파일 삭제만으로 과거 노출이 해소됐다고 주장하지 않습니다.
-이번 실습에는 가상 자료만 사용하며 실제 비밀값의 과거 노출은 별도 폐기·교체가 필요합니다.
+현재 정적 파일과 이 브랜치에는 가상 메모 본문이 없습니다.
+이전 공개 커밋, 이전 배포, 포크·캐시·내려받은 사본은 그대로 남을 수 있습니다.
+현재 파일 삭제로 과거 노출이 해소됐다고 주장하지 않습니다.
+2단계 재현 주소의 서버 API도 의도적으로 공개되어 있다는 한계를 유지합니다.
+실제 비밀값·개인정보는 이 실습에 사용하지 않습니다.
 
-## 저장점과 제출
-
-검증 후 변경 파일과 비밀값 검색 결과를 확인하고 2단계 저장점으로 커밋합니다.
-aleph.config.json의 단계·저장소·배포 주소는 구현과 맞췄습니다.
-bundle-notes.json에 단계 설명을 작성하고 npm run bundle을 실행합니다.
-bundle-notes.json, artifacts/submission.json, 서버 키, 메모 SQL은 커밋하지 않습니다.
-로그인·허용 경로·원본 API·정책 변경은 해당 후속 단계에서만 추가합니다.
-src/decider.mjs, src/detect.mjs의 시험은 반 엔진 또는 운영 심판의 결과가 아닙니다.
-자세한 공통 규칙은 [AGENTS.md](AGENTS.md)를 따릅니다.
+공통 작업 규칙과 저장점 규칙은 [AGENTS.md](AGENTS.md)를 따릅니다.

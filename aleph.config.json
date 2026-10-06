@@ -1,7 +1,7 @@
 {
   "step": 2,
   "repoUrl": "https://github.com/rlatmdgus4141/choi-bujang-secret-vault",
-  "publicAppUrl": "https://choi-bujang-secret-vault-rosy.vercel.app",
+  "publicAppUrl": "https://choi-bujang-secret-vault-stage2-rlatmdgus4141.vercel.app",
   "sampleMarker": "SAMPLE_NOTE_1",
   "judgeIssuer": "https://aleph-judge-production.up.railway.app/defense/judge",
   "identityProvider": null,
