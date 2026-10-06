@@ -20,6 +20,9 @@ function passingResponse(url) {
   const path = new URL(url).pathname;
   if (path === '/data.json') return Response.json({ notes: [] });
   if (path === '/rest/v1/notes') return Response.json({ code: '42501' }, { status: 401 });
+  if (path === '/') return new Response('<script src="/auth.js"></script>', {
+    headers: { 'X-Content-Type-Options': 'nosniff' } });
+  if (path === '/auth.js') return new Response('server-auth');
   return Response.json({ error: 'login required' }, { status: 401 });
 }
 
@@ -28,7 +31,7 @@ test('strict self-checks preserve the submission schema when all actual response
   try {
     globalThis.fetch = async url => passingResponse(url);
     const attempts = await runAttackChecks(config, { requirePass: true });
-    assert.equal(attempts.length, 9);
+    assert.equal(attempts.length, 11);
     assert.ok(attempts.every(attempt =>
       Object.keys(attempt).sort().join(',') === 'attackId,expected,observed'));
     assert.equal(JSON.stringify(attempts).includes('sb_publishable_'), false);
@@ -53,6 +56,10 @@ test('strict self-checks reject leaked static data, permitted app access and dir
         && init.method === 'GET',
       // An invalid key is not evidence that table grants deny access.
       response: () => Response.json({ message: 'Invalid API key' }, { status: 401 }) },
+    { id: 'home_security_header', match: url => url.pathname === '/',
+      response: () => new Response('<script src="/auth.js"></script>') },
+    { id: 'browser_public_key_absent', match: url => url.pathname === '/auth.js',
+      response: () => new Response(['sb', 'publishable', 'fixture-public-key'].join('_')) },
   ];
   try {
     for (const regression of regressions) {

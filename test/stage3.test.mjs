@@ -174,16 +174,19 @@ test('authenticated stages self-check records actual rejection requests without 
     globalThis.fetch = async (url, options) => {
       calls.push({ path: new URL(url).pathname, search: new URL(url).search, options });
       if (new URL(url).pathname === '/rest/v1/notes') return Response.json({ code: '42501' }, { status: 401 });
+      if (new URL(url).pathname === '/') return new Response('<script src="/auth.js"></script>', {
+        headers: { 'X-Content-Type-Options': 'nosniff' } });
+      if (new URL(url).pathname === '/auth.js') return new Response('server-auth');
       return new URL(url).pathname === '/data.json' ? Response.json({ notes: [] })
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, 9);
+    assert.equal(calls.length, 11);
     assert.equal(calls[2].options.method, 'POST');
-    assert.ok(checks.slice(1).every(check => check.observed.includes('HTTP 401')));
+    assert.ok(checks.slice(1, 9).every(check => check.observed.includes('HTTP 401')));
     assert.equal(JSON.stringify(checks).includes('Bearer'), false);
     assert.equal(JSON.stringify(checks).includes('sb_publishable_'), false);
-    assert.ok(calls.slice(7).every(call => call.options.headers.apikey.startsWith('sb_publishable_')
+    assert.ok(calls.slice(7, 9).every(call => call.options.headers.apikey.startsWith('sb_publishable_')
       && !call.options.headers.Authorization));
     assert.equal(calls[8].options.method, 'PATCH');
     assert.equal(calls[8].search, '?id=is.null');

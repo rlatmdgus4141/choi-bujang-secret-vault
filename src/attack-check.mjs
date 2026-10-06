@@ -64,9 +64,9 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       if (config.originalApiUrl !== new URL('/rest/v1/notes', config.identityProvider.issuer).href) {
         throw new Error('원본 자료 주소가 해당 Supabase 메모 경로와 다릅니다.');
       }
-      // 브라우저에 이미 공개된 publishable key만 사용합니다. 사용자 JWT나 서버 키는 읽지 않습니다.
-      const frontend = readFileSync(new URL('../public/auth.js', import.meta.url), 'utf8');
-      const publicKey = frontend.match(/const publishableKey = '(sb_publishable_[A-Za-z0-9_-]+)'/u)?.[1];
+      // 서버 Auth 함수의 공개 키만 사용합니다. 사용자 JWT나 서버 전용 키는 읽지 않습니다.
+      const authServer = readFileSync(new URL('../api/auth.js', import.meta.url), 'utf8');
+      const publicKey = authServer.match(/const publishableKey = '(sb_publishable_[A-Za-z0-9_-]+)'/u)?.[1];
       if (!publicKey) throw new Error('공개 키를 확인할 수 없어 원본 API 점검을 중단했습니다.');
       for (const method of ['GET', 'PATCH']) {
         const url = new URL(config.originalApiUrl);
@@ -88,6 +88,29 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
             : `원본 권한 거부 확인 실패 (HTTP ${direct.status})` });
         passed.push(denied);
       }
+      const home = await fetch(new URL('/', app), { redirect: 'error', signal: AbortSignal.timeout(15000) });
+      const html = await home.text();
+      const protectedHome = home.ok && home.headers.get('x-content-type-options') === 'nosniff';
+      attempts.push({ attackId: 'home_security_header', expected: '첫 화면 응답에 nosniff 보안 헤더가 있음',
+        observed: protectedHome ? 'HTTP 200, X-Content-Type-Options: nosniff 확인'
+          : `첫 화면 보안 헤더 확인 실패 (HTTP ${home.status})` });
+      passed.push(protectedHome);
+      const paths = new Set();
+      for (const match of html.matchAll(/src=["']([^"']+\.(?:js|mjs)(?:\?[^"']*)?)["']/gu)) {
+        const url = new URL(match[1], app);
+        if (url.origin === app.origin) paths.add(url.href);
+      }
+      let noClientKey = home.ok && paths.size > 0 && !html.includes(publicKey);
+      for (const path of paths) {
+        const script = await fetch(path, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+        const text = await script.text();
+        noClientKey &&= script.ok && !text.includes(publicKey)
+          && !/\bsb_publishable_[A-Za-z0-9_-]{8,}|\beyJ[A-Za-z0-9_-]{12,}\.eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/u.test(text);
+      }
+      attempts.push({ attackId: 'browser_public_key_absent', expected: '첫 화면과 화면 스크립트에 Supabase 공개 키가 없음',
+        observed: noClientKey ? '첫 화면·화면 스크립트에서 Supabase 공개 키 없음 확인'
+          : '화면 코드의 공개 키 제거 확인 실패' });
+      passed.push(noClientKey);
     }
     return finish(attempts, passed);
   }

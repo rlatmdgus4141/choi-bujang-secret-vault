@@ -1,8 +1,20 @@
 (() => {
   'use strict';
-  // Project URL과 publishable key는 공개용입니다. 서버 전용 키는 사용하지 않습니다.
+  // 공식 SDK의 Auth 요청만 같은 출처의 서버 함수로 전달합니다.
   const projectUrl = 'https://nsqtwulghnijprefvfud.supabase.co';
-  const publishableKey = 'sb_publishable_9ohhX0Y5CQoKTfsNg7BsBQ_R0qaBGpb';
+  const authTransport = 'server-auth'; // SDK 초기화용 표식이며 Supabase 키가 아닙니다.
+  function authFetch(input, init) {
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.origin !== projectUrl || !url.pathname.startsWith('/auth/v1/')) {
+      throw new Error('unsupported_auth_request');
+    }
+    const query = new URLSearchParams(url.search);
+    query.set('authPath', url.pathname.slice('/auth/v1/'.length));
+    const headers = new Headers(init?.headers);
+    headers.delete('apikey');
+    if (headers.get('Authorization') === `Bearer ${authTransport}`) headers.delete('Authorization');
+    return fetch(`/api/auth?${query}`, { ...init, headers, cache: 'no-store', credentials: 'same-origin' });
+  }
   const form = document.querySelector('#login-form');
   const email = document.querySelector('#email');
   const password = document.querySelector('#password');
@@ -188,8 +200,9 @@
   });
 
   try {
-    client = window.supabase.createClient(projectUrl, publishableKey, {
+    client = window.supabase.createClient(projectUrl, authTransport, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      global: { fetch: authFetch },
     });
     // 콜백 안에서 다른 Auth 메서드를 기다리지 않습니다.
     client.auth.onAuthStateChange((_event, session) => {
