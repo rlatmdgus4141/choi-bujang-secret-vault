@@ -103,3 +103,23 @@ test('official SDK login, refresh and local sign-out use the proxy without a bro
   assert.deepEqual(operations, ['password', 'refresh_token', 'logout']);
   assert.throws(() => authFetch(`${projectUrl}/rest/v1/notes`, {}));
 });
+
+test('Auth API response version preserves official SDK login error codes', async () => {
+  const handler = createAuthHandler({ env, fetchImpl: async () => Response.json({
+    code: 'invalid_credentials', message: 'Invalid login credentials',
+  }, { status: 400, headers: { 'X-Supabase-Api-Version': '2024-01-01' } }) });
+  const client = createClient(projectUrl, 'server-auth', {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: async (_url, init) => {
+      const res = response();
+      await handler({ url: '/api/auth?authPath=token&grant_type=password', method: 'POST',
+        headers: {}, body: init.body }, res);
+      return Response.json(res.body, { status: res.statusCode, headers: res.headers });
+    } },
+  });
+  const result = await client.auth.signInWithPassword({
+    email: ['fixture', 'example.invalid'].join('@'), password: 'fixture-only',
+  });
+  assert.equal(result.error?.code, 'invalid_credentials');
+  assert.equal(result.data.session, null);
+});

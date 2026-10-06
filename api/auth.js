@@ -54,6 +54,10 @@ export function createAuthHandler({ env = process.env, fetchImpl = fetch } = {})
       const response = await fetchImpl(upstream, { method, headers,
         ...(body === undefined ? {} : { body }), redirect: 'error',
         signal: AbortSignal.timeout(10000) });
+      const responseVersion = response.headers.get('x-supabase-api-version');
+      if (responseVersion && /^\d{4}-\d{2}-\d{2}$/u.test(responseVersion)) {
+        res.setHeader('X-Supabase-Api-Version', responseVersion);
+      }
       if (response.status === 204) return res.status(204).end();
       const data = await response.json();
       if (JSON.stringify(data).includes(publishableKey)) return fail(502, '인증 응답을 확인하지 못했습니다.');
