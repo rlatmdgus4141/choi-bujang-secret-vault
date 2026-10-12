@@ -1,0 +1,179 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "brute-force",
+  "decisions": [
+    {
+      "alertId": "bf-01",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-02",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "password_spraying: 여러 계정의 동일 비밀번호 대입 실패"
+    },
+    {
+      "alertId": "bf-03",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-04",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-05",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "multi_account_failures: 많은 계정을 바꾸며 반복된 인증 실패"
+    },
+    {
+      "alertId": "bf-06",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-07",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-08",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-09",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "password_spraying: 여러 계정의 동일 비밀번호 대입 실패"
+    },
+    {
+      "alertId": "bf-10",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "repeated_login_failures: 상관된 다수 인증 실패"
+    },
+    {
+      "alertId": "bf-11",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-12",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-13",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-14",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-15",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-16",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-17",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-18",
+      "action": "alert",
+      "confidence": 0.7,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-19",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "repeated_login_failures: 의심 신호, 자동 차단 근거 부족"
+    },
+    {
+      "alertId": "bf-20",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-21",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-22",
+      "action": "record",
+      "confidence": 0.2,
+      "reason": "패턴 미충족: 적은 인증 실패, 기록만 유지"
+    },
+    {
+      "alertId": "bf-23",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-24",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-25",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-26",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-27",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    },
+    {
+      "alertId": "bf-28",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "패턴 미충족: 정상 관찰 또는 인증 실패 증거 없음"
+    }
+  ],
+  "counts": {
+    "block": 10,
+    "alert": 9,
+    "record": 9
+  }
+}
