@@ -1,0 +1,167 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "web-injection",
+  "decisions": [
+    {
+      "alertId": "wi-01",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "sql_injection: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-02",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "script_injection: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-03",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "path_traversal: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-04",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "sql_injection: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-05",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "sql_injection: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-06",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "command_injection: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-07",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "path_traversal: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-08",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "sql_injection: 동일 출발 주소의 반복 주입 근거 확인"
+    },
+    {
+      "alertId": "wi-09",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-10",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-11",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-12",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-13",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-14",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-15",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-16",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-17",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "web_injection_review: T1190 의심 경보, 명확한 주입 패턴 미확인"
+    },
+    {
+      "alertId": "wi-18",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-19",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-20",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-21",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-22",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-23",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-24",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-25",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    },
+    {
+      "alertId": "wi-26",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 웹 주입 패턴 근거 없음"
+    }
+  ],
+  "counts": {
+    "block": 8,
+    "alert": 9,
+    "record": 9
+  }
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "sql_injection",
+    "technique": "T1190",
+    "condition": "요청 인자의 UNION SELECT·조건식·SQL 문장 연결 또는 상관 경보의 SQL 주입 요약을 확인한다. 단순 SQL/select 단어는 차단하지 않는다.",
+    "thresholds": {
+      "blockCount": 5,
+      "minRuleLevel": 10,
+      "maxWindowSeconds": 300
+    },
+    "evidence": "MITRE T1190은 공개 앱을 통한 SQL 주입 악용 사례를 포함한다.",
+    "source": "https://attack.mitre.org/techniques/T1190/"
+  },
+  {
+    "name": "script_injection",
+    "technique": "T1190",
+    "condition": "script 태그·이벤트 처리 속성·스크립트 삽입 경보를 찾는다. 수업명 script나 부정된 삽입 설명만으로 차단하지 않는다.",
+    "thresholds": {
+      "blockCount": 5,
+      "minRuleLevel": 10,
+      "maxWindowSeconds": 300
+    },
+    "evidence": "공개 웹 앱 악용이라는 T1190 과제 범주에서, OWASP가 설명하는 사용자 입력의 스크립트 주입 형태를 관찰한다. 모든 XSS를 T1190 초기 접근으로 단정하지 않는다.",
+    "source": "https://owasp.org/www-community/attacks/xss/"
+  },
+  {
+    "name": "path_traversal",
+    "technique": "T1190",
+    "condition": "두 단계 이상의 ../ 또는 ..\\ 시퀀스와 경로 이탈 상관 경보를 찾는다. up 같은 일반 단어는 차단하지 않는다.",
+    "thresholds": {
+      "blockCount": 5,
+      "minRuleLevel": 10,
+      "maxWindowSeconds": 300
+    },
+    "evidence": "MITRE T1190 악용 사례에는 디렉터리 순회가 있으며 OWASP는 상위 경로 시퀀스로 허용 경로 밖 파일에 접근하는 형태를 설명한다.",
+    "source": "https://owasp.org/www-community/attacks/Path_Traversal"
+  },
+  {
+    "name": "command_injection",
+    "technique": "T1190",
+    "condition": "명령 구분자와 명령 구문의 조합 또는 명령 구분자 주입 상관 경보를 찾는다. 구분자 한 글자만으로 차단하지 않는다.",
+    "thresholds": {
+      "blockCount": 5,
+      "minRuleLevel": 10,
+      "maxWindowSeconds": 300
+    },
+    "evidence": "MITRE T1190에는 명령 주입 취약점 악용 사례가 있으며 OWASP는 외부 입력이 운영체제 명령에 전달되는 주입을 설명한다.",
+    "source": "https://owasp.org/www-community/attacks/Command_Injection"
+  }
+]

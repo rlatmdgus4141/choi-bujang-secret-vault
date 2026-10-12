@@ -1,8 +1,26 @@
-# 보너스 xdr-01 제출 저장점
+# 보너스 xdr-02 제출 저장점
 
 기본 브랜치 `main`에서 심판이 읽는 `xdr/brute-force/decide.mjs`를 제공합니다.
 이 모듈은 `defense-r5`의 `3b89300878a128e99c520591daa6b0b9f7ecc667`과 같습니다.
 이전 판정은 시작 틀 커밋 `8a0927400ec0`을 읽어 모듈을 찾지 못했습니다.
+
+## 현재 보너스 상태
+
+- xdr-01 무차별 로그인: 사용자에게 심판 통과 확인을 받았습니다.
+- xdr-02 웹 주입: `xdr/web-injection/decide.mjs` 구현과 로컬 검증을 완료했고 심판 제출을 기다립니다.
+- 웹 주입 공식 경보 26건: block 8 · alert 9 · record 9. 정상 이벤트 9건의 추가 차단은 0건입니다.
+- SQL·스크립트·경로 이탈·명령 주입의 명확한 반복 시도만 차단 후보로 삼고, 단발성 의심 경보는 알립니다.
+
+```sh
+npm run xdr:run -- web-injection
+npm run xdr:web:read
+npm run xdr:web:respond -- web-injection
+npm run test:xdr
+```
+
+`decide.mjs`는 import 없이 단독 실행되며 로그·만료 규칙 처리는 `respond.mjs`에 분리했습니다.
+현재 `src/decider.mjs`의 `starter.deny`는 그대로입니다. 정상 통과는 별도 시험용 기본 정책에서 검증했습니다.
+운영 Wazuh나 반 엔진이 연결됐다고 주장하지 않습니다. 상세 근거와 제한은 [웹 주입 문서](docs/XDR_WEB_INJECTION.md)를 참고하세요.
 
 ## 브랜치와 배포
 
