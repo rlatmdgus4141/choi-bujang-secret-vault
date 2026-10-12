@@ -1,3 +1,37 @@
+# 보너스 xdr-01 제출 저장점
+
+기본 브랜치 `main`에서 심판이 읽는 `xdr/brute-force/decide.mjs`를 제공합니다.
+이 모듈은 `defense-r5`의 `3b89300878a128e99c520591daa6b0b9f7ecc667`과 같습니다.
+이전 판정은 시작 틀 커밋 `8a0927400ec0`을 읽어 모듈을 찾지 못했습니다.
+
+## 브랜치와 배포
+
+- `main`: 기존 시작 틀을 보존하고 보너스 모듈·시험·문서를 추가한 제출 브랜치입니다.
+- `defense-r5`: 1~5단계 총 500점을 받은 자료실과 실제 운영 배포의 브랜치입니다.
+- 제출 배포 주소: https://choi-bujang-secret-vault-rosy.vercel.app
+- 제출 저장소 주소: https://github.com/rlatmdgus4141/choi-bujang-secret-vault
+
+`main`의 시작 틀 설정·정적 가상 자료는 운영 자료실을 나타내지 않습니다.
+보너스 심판의 기본 브랜치 파일 조회를 고치기 위해 앱 설정이나 기존 판정기 규칙을 변경하지 않았습니다.
+
+## 실행과 확인
+
+```sh
+npm run xdr:run -- brute-force
+npm run test:xdr
+npm run xdr:respond -- brute-force
+```
+
+공식 가상 경보 28건의 결과는 block 10 · alert 9 · record 9입니다.
+독립된 시험용 기본 정책에서 정상 이벤트 9건의 추가 차단은 0건입니다.
+판단 파일은 다른 파일·패키지를 불러오지 않고 격리 환경에서 단독 실행됩니다.
+근거·만료 규칙·운영 연결의 한계는 [XDR 문서](docs/XDR_BRUTE_FORCE.md)에 있습니다.
+실제 Wazuh/반 엔진 연결이나 심판 통과를 로컬 시험 결과로 주장하지 않습니다.
+
+---
+
+## 아래는 보존한 시작 틀 안내입니다
+
 # BYTE BACK 방어전 시작 틀 R5
 
 이 저장소는 1단계에서 학생 본인이 GitHub 저장소와 Vercel 배포를 만드는 출발점입니다. 포함된 메모 네 건은 가상 자료입니다. 실제 학생 자료, 토큰, 비밀키를 넣지 마세요.

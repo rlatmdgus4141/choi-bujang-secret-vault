@@ -4,3 +4,7 @@ bundle-notes.json
 .env.*
 node_modules/
 public/aleph.json
+
+# XDR local audit and temporary deny rules
+xdr/alerts.log
+xdr/runtime/

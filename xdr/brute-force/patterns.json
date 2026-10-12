@@ -1,0 +1,26 @@
+[
+  {
+    "name": "repeated_login_failures",
+    "technique": "T1110.001",
+    "condition": "출발 주소와 계정이 식별되는 인증 실패 요약에서 짧은 시간의 많은 실패 또는 강하게 상관된 반복 실패를 찾는다. 낮은 횟수는 알림만 남긴다.",
+    "thresholds": { "blockCount": 30, "alertCount": 3, "minRuleLevel": 10, "maxWindowSeconds": 300 },
+    "evidence": "MITRE T1110.001은 비밀번호 추측과 반복 인증 실패를 설명한다. 횟수·시간·수준의 수치는 이 학습용 보수적 정책이며 MITRE가 지정한 값이 아니다.",
+    "source": "https://attack.mitre.org/techniques/T1110/001/"
+  },
+  {
+    "name": "password_spraying",
+    "technique": "T1110.003",
+    "condition": "동일 출발 주소의 실패 경보가 여러 계정에 같은 비밀번호를 대입했다고 명시하고, 서로 다른 계정이 기준 이상인 경우를 찾는다. 비밀번호 원문은 읽지 않는다.",
+    "thresholds": { "blockAccounts": 5, "minRuleLevel": 10, "maxWindowSeconds": 300 },
+    "evidence": "MITRE T1110.003은 여러 계정에 한 비밀번호 또는 소수 비밀번호를 시도하는 password spraying을 설명한다. 계정 수 기준은 학습용 정책이다.",
+    "source": "https://attack.mitre.org/techniques/T1110/003/"
+  },
+  {
+    "name": "multi_account_failures",
+    "technique": "T1110",
+    "condition": "같은 주소에서 많은 계정을 바꿔 가며 인증 실패가 반복되고 자동화 정황까지 확인된 경우를 찾는다. 비밀번호가 같다는 증거가 없으면 스프레이로 단정하지 않는다.",
+    "thresholds": { "blockAccounts": 15, "minRuleLevel": 10, "maxWindowSeconds": 300 },
+    "evidence": "MITRE T1110의 탐지는 사용자 집합을 대상으로 한 짧은 간격의 반복 인증 실패를 다룬다. 계정 수 기준은 학습용 정책이다.",
+    "source": "https://attack.mitre.org/techniques/T1110/"
+  }
+]
