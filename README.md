@@ -1,5 +1,15 @@
 # 7단계 저장점 · 보너스 모듈 보존
 
+## 8단계 첫 제출 오류 보완
+
+심판 S08_OTHER_ZONE_ALLOWED에 대해 판정기의 자원 ID 허용 범위를 최소 수정했습니다.
+임의 영숫자 문자열 대신 실제 API와 같은 UUID 경로를 사용합니다.
+공식 /notes/demo 가상 연습은 GET만 유지하고, 다른 임의 자원과 공지 수정은 거부합니다.
+원본 API의 소유자·강사 검사 및 기기·추가 확인 규칙은 보존합니다.
+이는 경로 과잉 허용 후보를 수정한 것이며 실제 심판 재제출 성공은 아직 확인하지 않았습니다.
+실행: `node --test test/stage6-decider.test.mjs test/stage7-decider.test.mjs test/stage8-decider.test.mjs`.
+
+
 ## 8단계 저장점 · 판정기 자원 구역
 
 7단계는 사용자 제출 결과 90점으로 통과했습니다.

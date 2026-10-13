@@ -70,7 +70,7 @@ test('stage 7 recent activity uses the supplied event kind and window; fresh log
   }
   await expect({ ...request, recentEvents: [{ kind: 'risk_signal', ageSeconds: 300, count: 10 }] }, 'step_up');
   await expect({ ...suspicious, method: 'PUT' }, 'deny');
-  await expect({ ...suspicious, method: 'PUT', route: 'PUT /notes/:id' }, 'step_up');
+  await expect({ ...suspicious, method: 'PUT', path: '/notes/11111111-1111-4111-8111-111111111111', route: 'PUT /notes/:id' }, 'step_up');
   await expect({ ...suspicious, method: 'PUT', stepUp: { verified: true, authAgeSeconds: 0 } }, 'deny');
   await expect({ ...suspicious, service: 'admin' }, 'deny');
 });
