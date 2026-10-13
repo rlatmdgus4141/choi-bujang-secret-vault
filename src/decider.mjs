@@ -44,50 +44,70 @@ function recentlyVerified(stepUp) {
     && stepUp.authAgeSeconds >= 0 && stepUp.authAgeSeconds <= 900;
 }
 
-export async function decide(request) {
-  const reply = (decision, reasonCode, ruleId) => ({
-    schema: 'aleph.decision.v1', requestId: request?.requestId,
-    decision, reasonCode, ruleIds: [ruleId],
+const GRANT_FIELDS = Object.freeze([
+  'classId', 'projectId', 'subjectId', 'deviceId', 'service', 'method', 'path', 'route',
+]);
+
+// Syntax only. Passing this function is never an authorization decision.
+function knownResourceRoute(grant) {
+  if (!['notes', 'notices'].includes(grant.service)) return false;
+  return [`/${grant.service}`, `/api/${grant.service}`].some(base => {
+    if (grant.path === base && grant.route === `${grant.method} ${base}`) {
+      return ['GET', 'POST'].includes(grant.method);
+    }
+    if (!grant.path.startsWith(`${base}/`) || grant.route !== `${grant.method} ${base}/:id`) return false;
+    const id = grant.path.slice(base.length + 1);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id);
+    if (!uuid) return grant.path === '/notes/demo' && grant.service === 'notes' && grant.method === 'GET';
+    return (grant.service === 'notes' ? ['GET', 'PUT', 'DELETE'] : ['GET', 'PUT']).includes(grant.method);
   });
-  if (request?.deviceRegistered !== true) {
-    return reply('deny', 'device_not_registered', 'device_registered');
-  }
-  const identityPresent = typeof request.subjectId === 'string' && request.subjectId.trim().length > 0;
-  const devicePresent = typeof request.deviceId === 'string' && /^[a-f0-9]{16}$/u.test(request.deviceId);
-  // Route is an engine-confirmed method/template pair, never a prefix or browser selector.
-  // Live resources use the same UUID format as the final API. Arbitrary slugs are not resource IDs.
-  // Keep the starter's documented read-only /notes/demo practice resource; it is not a live UUID.
-  const zoneRoute = ['notes', 'notices'].some(resource => {
-    if (request.service !== resource) return false;
-    return [`/${resource}`, `/api/${resource}`].some(base => {
-      const list = request.path === base && request.route === `${request.method} ${base}`;
-      const id = typeof request.path === 'string' && request.path.startsWith(`${base}/`)
-        ? request.path.slice(base.length + 1) : '';
-      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id);
-      const practiceRead = request.signals?.source === 'judge_fixture'
-        && Object.entries(PRACTICE_READ_GRANT).every(([key, value]) => request[key] === value);
-      const item = (uuid || practiceRead) && request.route === `${request.method} ${base}/:id`;
-      // No teacher/ownership assertion exists in this contract. Notices mutations fail closed here.
-      // A notes allow is only the route gate: the final API must atomically constrain owner_id.
-      return resource === 'notes'
-        ? list && ['GET', 'POST'].includes(request.method) || item && ['GET', 'PUT', 'DELETE'].includes(request.method)
-        : request.method === 'GET' && (list || item);
+}
+
+// Server initialization only. This factory is not an HTTP API and never reads grants from requests.
+// Enrollment must provide engine pseudonyms; raw Supabase UUIDs are not inferred to be subjectIds.
+export function createDecider({ grants = [] } = {}) {
+  if (!Array.isArray(grants)) throw new TypeError('Invalid resource policy');
+  const policy = Object.freeze(grants.map(grant => {
+    if (!grant || typeof grant !== 'object' || Array.isArray(grant)
+        || Object.keys(grant).length !== GRANT_FIELDS.length
+        || !GRANT_FIELDS.every(key => Object.hasOwn(grant, key))
+        || !GRANT_FIELDS.every(key => typeof grant[key] === 'string' && grant[key].length > 0
+          && grant[key].length <= 256 && !/[\s*]/u.test(key === 'route'
+            ? grant[key].replace(/^[A-Z]+ /u, '') : grant[key]))
+        || !/^[a-f0-9]{16}$/u.test(grant.deviceId) || !knownResourceRoute(grant)) {
+      throw new TypeError('Invalid resource grant');
+    }
+    return Object.freeze(Object.fromEntries(GRANT_FIELDS.map(key => [key, grant[key]])));
+  }));
+  return async function decide(request) {
+    const reply = (decision, reasonCode, ruleId) => ({
+      schema: 'aleph.decision.v1', requestId: request?.requestId,
+      decision, reasonCode, ruleIds: [ruleId],
     });
-  });
-  const context = connectionContext(request);
-  if (!context) return reply('deny', 'starter_not_ready', 'starter.deny');
-  if (!zoneRoute || request.queryLength !== 0) return reply('deny', 'starter_not_ready', 'resource_zones');
-  // Registration always wins over step-up. Only the trusted engine can attest a fresh same-identity login.
-  // A fixture simulates that attestation; this module never creates it from a token or client header.
-  if (request.schema === 'aleph.decision.v1' && identityPresent && devicePresent
-      && ['notes', 'notices'].includes(request.service) && context.source === 'judge_fixture' && context.riskCount >= 2
-      && !recentlyVerified(request.stepUp)) {
-    return reply('step_up', 'step_up_required', 'step_up_required');
-  }
-  if (request.schema === 'aleph.decision.v1' && identityPresent && devicePresent
-      && zoneRoute && request.queryLength === 0) {
+    if (request?.deviceRegistered !== true) {
+      return reply('deny', 'device_not_registered', 'device_registered');
+    }
+    if (request.schema !== 'aleph.decision.v1') {
+      return reply('deny', 'starter_not_ready', 'starter.deny');
+    }
+    const context = connectionContext(request);
+    if (!context) return reply('deny', 'starter_not_ready', 'starter.deny');
+    const granted = request.queryLength === 0 && policy.some(grant =>
+      GRANT_FIELDS.every(key => request[key] === grant[key]));
+    // Exact permission is required even for a syntactically valid UUID, a list, or a fresh login.
+    if (!granted || request.path === '/notes/demo' && context.source !== 'judge_fixture') {
+      return reply('deny', 'starter_not_ready', 'resource_zones');
+    }
+    if (context.source === 'judge_fixture' && context.riskCount >= 2 && !recentlyVerified(request.stepUp)) {
+      return reply('step_up', 'step_up_required', 'step_up_required');
+    }
     return reply('allow', 'approved', 'resource_zones');
-  }
-  // Unknown resource, method, path, query or absent authority stays denied.
-  return reply('deny', 'starter_not_ready', 'starter.deny');
+  };
+}
+
+// Only the documented synthetic resource is enrolled in the distributed exercise policy.
+// Unenrolled live resources fail closed. The existing browser API keeps its DB owner checks.
+const defaultDecider = createDecider({ grants: [PRACTICE_READ_GRANT] });
+export async function decide(request) {
+  return defaultDecider(request);
 }

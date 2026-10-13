@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, RULE_IDS } from '../src/decider.mjs';
+import { decide, createDecider, RULE_IDS } from '../src/decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 const { normal, suspicious } = fixtureRequests();
-const expect = async (request, decision, reason) => {
-  const out = await decide(request);
+const expect = async (request, decision, reason, policy = decide) => {
+  const out = await policy(request);
   assert.equal(out.decision, decision);
   if (reason) assert.equal(out.reasonCode, reason);
   assert.equal(Object.keys(out).sort().join(','), 'decision,reasonCode,requestId,ruleIds,schema');
@@ -58,8 +58,11 @@ test('stage 7 headers cannot change trusted engine signals or step-up status; no
   const headers = { 'x-region': 'local', 'x-network': 'usual', 'x-step-up': 'true', 'x-auth-age': '0' };
   await expect({ ...suspicious, headers }, 'step_up');
   const live = { ...normal, path: '/notes/11111111-1111-4111-8111-111111111111', signals: { source: 'none', region: 'unknown', network: 'unknown', hour: null } };
+  const grant = Object.fromEntries(['classId','projectId','subjectId','deviceId','service','method','path','route']
+    .map(key => [key, live[key]]));
+  const livePolicy = createDecider({ grants: [grant] });
   const snapshot = JSON.stringify(live);
-  await expect({ ...live, headers: { 'x-region': 'foreign' } }, 'allow');
+  await expect({ ...live, headers: { 'x-region': 'foreign' } }, 'allow', undefined, livePolicy);
   assert.equal(JSON.stringify(live), snapshot);
 });
 test('stage 7 recent activity uses the supplied event kind and window; fresh login never expands routes', async () => {
@@ -70,7 +73,7 @@ test('stage 7 recent activity uses the supplied event kind and window; fresh log
   }
   await expect({ ...request, recentEvents: [{ kind: 'risk_signal', ageSeconds: 300, count: 10 }] }, 'step_up');
   await expect({ ...suspicious, method: 'PUT' }, 'deny');
-  await expect({ ...suspicious, method: 'PUT', path: '/notes/11111111-1111-4111-8111-111111111111', route: 'PUT /notes/:id' }, 'step_up');
+  await expect({ ...suspicious, method: 'PUT', path: '/notes/11111111-1111-4111-8111-111111111111', route: 'PUT /notes/:id' }, 'deny');
   await expect({ ...suspicious, method: 'PUT', stepUp: { verified: true, authAgeSeconds: 0 } }, 'deny');
   await expect({ ...suspicious, service: 'admin' }, 'deny');
 });

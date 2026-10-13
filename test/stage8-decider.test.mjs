@@ -1,77 +1,106 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, RULE_IDS } from '../src/decider.mjs';
+import { decide, createDecider, RULE_IDS } from '../src/decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
-const normal = fixtureRequests().normal;
+const { normal, suspicious } = fixtureRequests();
+const fields = ['classId','projectId','subjectId','deviceId','service','method','path','route'];
+const grantFor = request => Object.fromEntries(fields.map(key => [key, request[key]]));
+const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+const own = i => ({ ...normal, subjectId: `configured_subject_${i}`, deviceId: (i ? 'b' : 'a').repeat(16),
+  path: `/notes/${ids[i]}`, route: 'GET /notes/:id' });
 
-test('stage 8 gates exact note CRUD routes and read-only notices without changing the engine contract', async () => {
-  for (const base of ['/notes', '/api/notes']) {
+test('UUID syntax and collection routes never grant access to an unenrolled resource', async () => {
+  for (const base of ['/notes', '/api/notes']) for (const subjectId of [normal.subjectId, 'another_subject']) {
     for (const [method, path, route] of [
       ['GET', base, base], ['POST', base, base],
-      ...['GET', 'PUT', 'DELETE'].map(method => [method, `${base}/11111111-1111-4111-8111-111111111111`, `${base}/:id`]),
+      ...['GET','PUT','DELETE'].map(method => [method, `${base}/${ids[0]}`, `${base}/:id`]),
     ]) {
-      const out = await decide({ ...normal, method, path, route: `${method} ${route}` });
-      assert.equal(out.decision, 'allow');
+      const out = await decide({ ...normal, subjectId, method, path, route: `${method} ${route}` });
+      assert.equal(out.decision, 'deny');
       assert.deepEqual(out.ruleIds, ['resource_zones']);
-      assert.equal(Object.keys(out).length, 5);
     }
   }
-  for (const base of ['/notices', '/api/notices']) {
-    assert.equal((await decide({ ...normal, service: 'notices', path: base, route: `GET ${base}` })).decision, 'allow');
-    for (const method of ['POST', 'PUT', 'DELETE']) {
-      assert.equal((await decide({ ...normal, service: 'notices', method,
-        path: `${base}/notice-id`, route: `${method} ${base}/:id`, role: 'instructor' })).decision, 'deny');
-    }
-  }
+  assert.equal((await createDecider()(normal)).decision, 'deny');
+  assert.equal((await decide(normal)).decision, 'allow');
   assert.ok(RULE_IDS.includes('resource_zones'));
 });
 
-test('unknown paths, reserved operations, nested/encoded paths, service mismatch and query selectors cannot pass', async () => {
-  for (const path of ['/notes/export', '/notes/EXPORT', '/notes/bulk', '/notes/a/b',
-    '/notes/../notices', '/notes/%2e%2e', '/notes/a%2fb', '/notes/a?role=admin', '/notes/', '/admin']) {
-    assert.equal((await decide({ ...normal, path })).decision, 'deny', path);
-  }
-  for (const patch of [{ service: 'notices' }, { route: 'PUT /notes/:id' },
-    { queryLength: 1 }, { queryLength: undefined }, { deviceRegistered: false }]) {
-    assert.equal((await decide({ ...normal, ...patch })).decision, 'deny');
+test('server-enrolled A and B each access own exact resource, never the other resource', async () => {
+  const grants = [0,1].flatMap(i => ['GET','PUT','DELETE'].map(method =>
+    grantFor({ ...own(i), method, route: `${method} /notes/:id` })));
+  const policy = createDecider({ grants });
+  for (const i of [0,1]) for (const method of ['GET','PUT','DELETE']) {
+    const request = { ...own(i), method, route: `${method} /notes/:id` };
+    assert.equal((await policy(request)).decision, 'allow');
+    assert.equal((await policy({ ...request, path: own(1-i).path })).decision, 'deny');
   }
 });
 
-
-test('stage 8 rejects every non-UUID live resource, including other-zone and notice-like slugs', async () => {
-  const ids = ['other-user', 'another-zone', 'teacher-notice', 'notice-id', 'note-id',
-    'random-resource', '11111111-1111-4111-8111-11111111111z'];
-  for (const base of ['/notes', '/api/notes']) for (const id of ids) {
-    for (const method of ['GET', 'PUT', 'DELETE']) {
-      const result = await decide({ ...normal, method, path: `${base}/${id}`, route: `${method} ${base}/:id` });
-      assert.equal(result.decision, 'deny', `${method} ${base}/${id}`);
-    }
+test('an explicit list or create grant authorizes only its bound subject and device', async () => {
+  for (const method of ['GET','POST']) {
+    const request = { ...own(0), method, path: '/api/notes', route: `${method} /api/notes` };
+    const policy = createDecider({ grants: [grantFor(request)] });
+    assert.equal((await policy(request)).decision, 'allow');
+    assert.equal((await policy({ ...request, subjectId: own(1).subjectId })).decision, 'deny');
+    assert.equal((await policy({ ...request, deviceId: own(1).deviceId })).decision, 'deny');
   }
-  assert.equal((await decide(normal)).decision, 'allow');
-  for (const method of ['PUT', 'DELETE']) {
-    assert.equal((await decide({ ...normal, method, route: `${method} /notes/:id` })).decision, 'deny');
-  }
-  assert.equal((await decide({ ...normal, path: '/api/notes/demo', route: 'GET /api/notes/:id' })).decision, 'deny');
 });
 
+test('instructor notice mutation requires an explicit trusted grant; student role claims do not grant it', async () => {
+  const instructor = { ...own(0), subjectId: 'configured_instructor', service: 'notices',
+    method: 'PUT', path: `/api/notices/${ids[0]}`, route: 'PUT /api/notices/:id' };
+  const grants = [grantFor(instructor)];
+  const policy = createDecider({ grants });
+  assert.equal((await policy(instructor)).decision, 'allow');
+  const student = { ...instructor, subjectId: own(1).subjectId, role: 'instructor',
+    identity: { sub: instructor.subjectId }, headers: { 'x-role': 'instructor' },
+    grants, policy: { grants }, owner_id: instructor.subjectId };
+  assert.equal((await policy(student)).decision, 'deny');
+  assert.equal((await decide({ ...instructor, grants })).decision, 'deny');
+});
 
-test('the documented demo resource grant is bound to its subject, device, class and project', async () => {
+test('all scope and route fields match exactly; paths, aliases, selectors and fresh login cannot expand a grant', async () => {
+  const request = own(0), policy = createDecider({ grants: [grantFor(request)] });
+  for (const patch of [{ subjectId: own(1).subjectId }, { deviceId: own(1).deviceId },
+    { classId: 'another_class' }, { projectId: 'another_project' }, { service: 'notices' },
+    { method: 'PUT' }, { route: 'GET /api/notes/:id' }, { path: `/api/notes/${ids[0]}` },
+    { path: '/notes/export' }, { path: `${request.path}/more` }, { path: '/notes/../admin' },
+    { queryLength: 1 }, { queryLength: undefined }, { path: `/notes/${ids[1]}` }]) {
+    assert.equal((await policy({ ...request, ...patch, stepUp: { verified: true, authAgeSeconds: 0 } })).decision, 'deny');
+  }
+  for (const key of fields) assert.equal((await policy({ ...request, [key]: undefined })).decision, 'deny');
+});
+
+test('server policy snapshots cannot be changed by later mutation or request-supplied permissions', async () => {
+  const request = own(0), grant = grantFor(request), grants = [grant];
+  const policy = createDecider({ grants });
+  grant.subjectId = own(1).subjectId;
+  grants.push(grantFor(own(1)));
+  assert.equal((await policy(request)).decision, 'allow');
+  assert.equal((await policy({ ...own(1), grants, policy: { grants } })).decision, 'deny');
+  for (const invalid of [{ ...grantFor(request), subjectId: '*' },
+    { ...grantFor(request), deviceId: '' }, { ...grantFor(request), route: 'GET /notes/*' },
+    { ...grantFor(request), path: '/notes/export' }, { ...grantFor(request), path: '/notes/../admin' },
+    { ...grantFor(request), role: 'instructor' }, { ...grantFor(request), method: 'PATCH' }]) {
+    assert.throws(() => createDecider({ grants: [invalid] }), /Invalid resource grant/u);
+  }
+});
+
+test('registration and compound-risk rules still apply after exact resource authorization', async () => {
+  const request = { ...suspicious, ...grantFor(own(0)), method: 'PUT', route: 'PUT /notes/:id' };
+  const policy = createDecider({ grants: [grantFor(request)] });
+  assert.equal((await policy(request)).decision, 'step_up');
+  assert.equal((await policy({ ...request, stepUp: { verified: true, authAgeSeconds: 60 } })).decision, 'allow');
+  assert.equal((await policy({ ...request, stepUp: { verified: true, authAgeSeconds: 901 } })).decision, 'step_up');
+  assert.equal((await policy({ ...request, deviceRegistered: false })).reasonCode, 'device_not_registered');
+  assert.equal((await policy({ ...request, subjectId: own(1).subjectId, stepUp: { verified: true, authAgeSeconds: 60 } })).decision, 'deny');
+});
+
+test('documented exercise grant does not admit other subjects, scopes, devices or live demo requests', async () => {
   assert.equal((await decide(normal)).decision, 'allow');
-  for (const [key, value] of Object.entries({ subjectId: 'another_subject',
-    deviceId: 'bbbbbbbbbbbbbbbb', classId: 'another_class', projectId: 'another_project' })) {
-    for (const replacement of [value, undefined, '', null]) {
-      const request = { ...normal, [key]: replacement,
-        headers: { 'x-user-id': normal.subjectId, 'x-device-id': normal.deviceId },
-        identity: { sub: normal.subjectId }, role: 'instructor',
-        stepUp: { verified: true, authAgeSeconds: 0 } };
-      assert.equal((await decide(request)).decision, 'deny', key);
-    }
+  for (const [key,value] of Object.entries({ subjectId: 'another_subject', deviceId: 'b'.repeat(16),
+    classId: 'another_class', projectId: 'another_project' })) {
+    assert.equal((await decide({ ...normal, [key]: value })).decision, 'deny');
   }
-  assert.equal((await decide({ ...normal, signals: {
-    source: 'none', region: 'unknown', network: 'unknown', hour: null } })).decision, 'deny');
-  // Repeated requests do not establish ownership or poison a mutable first-seen cache.
-  for (let i = 0; i < 3; i++) {
-    assert.equal((await decide({ ...normal, subjectId: 'another_subject' })).decision, 'deny');
-    assert.equal((await decide(normal)).decision, 'allow');
-  }
+  assert.equal((await decide({ ...normal, signals: { source: 'none', region: 'unknown', network: 'unknown', hour: null } })).decision, 'deny');
 });

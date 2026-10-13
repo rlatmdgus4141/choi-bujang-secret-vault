@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { decide } from './decider.mjs';
+import { decide, createDecider } from './decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
@@ -155,13 +155,21 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     if (config.step >= 8) {
       const { normal } = fixtureRequests();
-      const result = await decide({ ...normal, subjectId: 'unlisted_practice_subject' });
-      const denied = result.decision === 'deny';
-      attempts.push({ attackId: 'local_other_subject_resource',
-        expected: '로컬 가상 사건: 같은 연습 자원에 다른 주체가 접근하면 deny',
-        observed: denied ? '로컬 가상 사건: 다른 주체의 연습 자원 조회 deny; 실제 심판 시험 아님'
-          : '로컬 구역 주체 조건 확인 실패' });
-      passed.push(denied);
+      const a = { ...normal, path: '/notes/11111111-1111-4111-8111-111111111111' };
+      const grant = Object.fromEntries(['classId','projectId','subjectId','deviceId','service','method','path','route']
+        .map(key => [key, a[key]]));
+      const enrolled = createDecider({ grants: [grant] });
+      const own = await enrolled(a);
+      const other = await enrolled({ ...a, subjectId: 'other_local_subject' });
+      const unknown = await decide(a);
+      const list = await decide({ ...normal, path: '/notes', route: 'GET /notes' });
+      const valid = own.decision === 'allow' && other.decision === 'deny'
+        && unknown.decision === 'deny' && list.decision === 'deny';
+      attempts.push({ attackId: 'local_exact_resource_authorization',
+        expected: '로컬 가상 사건: 명시적 자기 권한만 allow, 상대·미등록 UUID·미등록 목록은 deny',
+        observed: valid ? '로컬 가상 사건: 등록 자기 자원 allow, 상대·미등록 UUID·목록 deny; 실제 심판 시험 아님'
+          : '로컬 정확한 자원 권한 확인 실패' });
+      passed.push(valid);
     }
     return finish(attempts, passed);
   }
