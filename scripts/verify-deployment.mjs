@@ -9,6 +9,7 @@ export function assertDeploymentMetadata(identity, config, commit) {
     ...(config.step >= 3 ? { identityProvider: config.identityProvider,
       allowedRoutes: config.allowedRoutes } : {}),
     ...(config.step >= 5 ? { originalApiUrl: config.originalApiUrl } : {}),
+    ...(config.step >= 10 ? { restoreRoute: config.restoreRoute } : {}),
   };
   if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
     throw new Error('배포 식별 정보가 JSON 객체가 아닙니다.');

@@ -8,3 +8,7 @@ public/aleph.json
 xdr/alerts.log
 xdr/runtime/
 public/vendor/
+
+recovery/*.log
+recovery/*.lock
+recovery/*.tmp

@@ -182,7 +182,8 @@ test('authenticated stages self-check records actual rejection requests without 
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, 13);
+    assert.equal(calls.length, config.step >= 10 ? 14 : 13);
+    if (config.step >= 10) assert.equal(calls.find(call => call.path === config.restoreRoute).options.method, 'POST');
     assert.equal(calls.find(call => call.path === '/api/notes' && call.options.method === 'POST').options.method, 'POST');
     assert.ok(checks.slice(1, 9).every(check => check.observed.includes('HTTP 401')));
     assert.equal(JSON.stringify(checks).includes('Bearer'), false);
