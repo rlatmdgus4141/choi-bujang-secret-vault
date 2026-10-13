@@ -29,7 +29,9 @@
     "test:recovery": "node --test test/stage10-recovery.test.mjs",
     "recovery:check": "node scripts/check-recovery.mjs",
     "device:check": "node scripts/check-device.mjs",
-    "test:device": "node --test test/stage11-device.test.mjs"
+    "test:device": "node --test test/stage11-device.test.mjs",
+    "ops:check": "node scripts/check-operations.mjs",
+    "ops:live": "node scripts/check-operations-live.mjs"
   },
   "engines": {
     "node": ">=22"

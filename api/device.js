@@ -1,3 +1,4 @@
+import { attachEvidence } from '../src/request-evidence.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createLoginVerifier } from '../src/verify-login.mjs';
@@ -8,6 +9,7 @@ import config from '../aleph.config.json' with { type: 'json' };
 export function createDeviceHandler({clientFactory=createClient,env=process.env}={}) {
   let runtime;
   return async(req,res)=>{
+    attachEvidence(req,res,env);
     res.setHeader('Cache-Control','no-store');res.setHeader('Vary','Authorization');
     const fail=(status,error)=>res.status(status).json({error});
     if(!req.headers?.authorization)return fail(401,'유효한 로그인이 필요합니다.');

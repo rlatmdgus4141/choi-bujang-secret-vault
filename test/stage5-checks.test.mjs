@@ -19,6 +19,9 @@ const identity = () => ({
 
 function passingResponse(url) {
   const path = new URL(url).pathname;
+  if(path==='/api/operations')return Response.json({step:12,commit,engine:{name:'ALEPH SDP 엔진'},
+    officialAttacks:{verified:0,status:'unexecuted'}},{headers:{'x-vault-request-id':'11111111-1111-4111-8111-111111111111','x-vault-checked-at':new Date().toISOString()}});
+  if(path==='/operations-verification.json')return Response.json({commit,passed:true});
   if (path === '/manifest.webmanifest') return Response.json({start_url:'/',scope:'/',display:'standalone',icons:[{src:'/icons/icon-192.png'},{src:'/icons/icon-512.png'}]});
   if (path.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]));
   if (path === '/sw.js') return new Response("url.pathname.startsWith('/api/') /offline.html");

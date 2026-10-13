@@ -2,6 +2,8 @@
   'use strict';
   const { createDeviceClient } = await import('/device-client.js');
   const deviceClient = createDeviceClient();
+  const { observation } = await import('/operations-protocol.js');
+  const privateCheck = document.querySelector('#ops-private');
   const devicePanel = document.querySelector('#device-panel');
   const deviceState = document.querySelector('#device-state');
   const approveButton = document.querySelector('#approve-device');
@@ -184,6 +186,7 @@
       noteMessage.textContent = '';
     }
     currentSession = session;
+    if(privateCheck) privateCheck.disabled=!session || !deviceClient.approved;
     const version = ++requestVersion;
     pendingRequest?.abort();
     list.replaceChildren();
@@ -214,6 +217,7 @@
       if (status.approved !== true || status.status !== 'approved') throw new Error('device_not_approved');
       deviceState.textContent = '서버가 이 접속 기기를 승인했습니다.';
       section.hidden = false;
+      if(privateCheck)privateCheck.disabled=false;
       void loadNotes(currentSession, ++requestVersion);
     } catch {
       if (epoch === sessionEpoch) {
@@ -227,6 +231,26 @@
     deviceClient.reset(); ++requestVersion; pendingRequest?.abort();
     section.hidden = true; list.replaceChildren(); resetEditor();
     deviceState.textContent = '오프라인: 연결한 뒤 다시 로그인하고 승인을 요청하세요.';
+  });
+
+  privateCheck?.addEventListener('click',async()=>{
+    if(!currentSession||!deviceClient.approved||privateCheck.disabled)return;
+    privateCheck.disabled=true;
+    const session=currentSession,epoch=sessionEpoch;
+    for(const probe of [
+      {id:'approved_owner_read',stage:'3–6·11',name:'승인 기기의 본인 목록 조회',method:'GET',path:'/api/notes',expected:200},
+      {id:'unsigned_owner_read',stage:'11',name:'로그인은 유효하지만 서명 없는 조회',method:'GET',path:'/api/notes',expected:403,unsigned:true}]){
+      try{
+        const response=await(probe.unsigned?fetch(probe.path,{cache:'no-store',headers:{Authorization:`Bearer ${session.access_token}`},signal:AbortSignal.timeout(15000)}):
+          deviceClient.signedFetch(session,probe.path,{signal:AbortSignal.timeout(15000)}));
+        await response.body?.cancel();
+        if(epoch!==sessionEpoch)break;
+        window.dispatchEvent(new CustomEvent('vault-api-observation',{detail:observation(probe,response)}));
+      }catch{if(epoch===sessionEpoch)window.dispatchEvent(new CustomEvent('vault-api-observation',{
+        detail:{id:probe.id,stage:probe.stage,name:probe.name,method:probe.method,path:probe.path,expected:probe.expected,
+          scope:'live_api',status:'error',actual:null,requestId:null,checkedAt:null}}));}
+    }
+    privateCheck.disabled=!currentSession||!deviceClient.approved;
   });
 
   cancelEdit.addEventListener('click', resetEditor);

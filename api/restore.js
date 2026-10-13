@@ -1,3 +1,4 @@
+import { attachEvidence } from '../src/request-evidence.mjs';
 import { verifyDeviceRequest } from '../src/device-access.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
@@ -8,6 +9,7 @@ import config from '../aleph.config.json' with { type: 'json' };
 export function createRestoreHandler({ clientFactory = createClient, env = process.env, deviceVerifier = verifyDeviceRequest } = {}) {
   let runtime;
   return async (req, res) => {
+    attachEvidence(req, res, env);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Vary', 'Authorization');
     if (typeof req.headers?.authorization !== 'string' || !req.headers.authorization) {
