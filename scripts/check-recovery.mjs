@@ -7,6 +7,8 @@ import { generateKeyPair, SignJWT, jwtVerify } from 'jose';
 import { previewPolicy, restoreTestPolicy } from '../src/recovery-policy.mjs';
 import { createNotesHandler } from '../api/notes.js';
 import { createNoticesHandler } from '../api/notices.js';
+import { createRestoreHandler } from '../api/restore.js';
+import { noteContentHash } from '../src/note-integrity.mjs';
 import { checkDetection } from './detect-test.mjs';
 import { detect } from '../src/detect.mjs';
 import { fixtureRequests } from './fixture-7.mjs';
@@ -21,7 +23,7 @@ const response = () => ({ headers: {}, statusCode: 0, body: null,
 // Only synthetic accounts/notes and RAM signing keys are used here. No live user tokens or DB rows.
 async function apiRetest() {
   const pair = await generateKeyPair('ES256'), wrong = await generateKeyPair('ES256');
-  const a = randomUUID(), b = randomUUID(), rows = new Map(), checks = [];
+  const a = randomUUID(), b = randomUUID(), rows = new Map(), snapshots = new Map(), audit = [], checks = [];
   const env = { SUPABASE_URL: new URL(config.identityProvider.issuer).origin,
     SUPABASE_SECRET_KEY: ['sb','secret','fixture'].join('_') };
   const token = async (sub, patch = {}, key = pair.privateKey) => `Bearer ${await new SignJWT({
@@ -33,6 +35,17 @@ async function apiRetest() {
       try { return { data: { claims: (await jwtVerify(value, pair.publicKey)).payload } }; }
       catch { return { data: null, error: {} }; }
     }, admin: { async getUserById(id) { return { data: { user: { id, app_metadata: {} } } }; } },
+  }, async rpc(name,args) {
+    if (name !== 'vault_restore_note') throw new Error('unexpected recovery RPC');
+    const saved=snapshots.get(args.p_id);
+    if (!saved || saved.row.owner_id !== args.p_owner
+        || rows.has(args.p_id) && rows.get(args.p_id).owner_id !== args.p_owner) {
+      return {data:null,error:{code:'P0002'}};
+    }
+    if(noteContentHash(saved.row.title,saved.row.content)!==saved.hash) return {data:null,error:{code:'22000'}};
+    if(!args.p_dry_run){rows.set(saved.row.id,structuredClone(saved.row));audit.push({action:'restore',id:saved.row.id});}
+    return {data:{id:saved.row.id,owner_id:saved.row.owner_id,hash:saved.hash,
+      backupVersion:'stage10-v1',restored:!args.p_dry_run},error:null};
   }, from() {
     let action='read', input, fields='id', filters=[];
     const execute = () => {
@@ -40,6 +53,8 @@ async function apiRetest() {
       if(action==='insert') {
         if(rows.has(input.id)) return { data:null,error:{code:'23505'} };
         const row={...input,position:rows.size+1}; rows.set(row.id,row); matched=[row];
+        snapshots.set(row.id,{row:structuredClone(row),hash:noteContentHash(row.title,row.content)});
+        audit.push({action:'snapshot',id:row.id});
       } else if(action==='update') matched=matched.map(row=>{
         const next={...row,...input};rows.set(row.id,next);return next;
       });
@@ -52,6 +67,7 @@ async function apiRetest() {
       async maybeSingle(){const r=execute();return {...r,data:r.data?.[0]??null};},async single(){return this.maybeSingle();} };
   } });
   const collection=createNotesHandler({env,clientFactory}), item=createNotesHandler({env,clientFactory,itemRoute:true});
+  const restore=createRestoreHandler({env,clientFactory});
   const notice=createNoticesHandler({env,clientFactory,itemRoute:true});
   const call=async(method,bearer,body,id)=>{
     const res=response();await(id?item:collection)({method,headers:{authorization:bearer},body,
@@ -66,12 +82,24 @@ async function apiRetest() {
     const created=await call('POST',bearer,{title:'synthetic fixture',body:'fictional only'});
     check(`${label}_own_create`,created.statusCode,201);ids.push(created.body.id);
   }
-  // A verified pre-incident snapshot is held in RAM, then B is corrupted and restored before API retests.
-  const saved=structuredClone(rows.get(ids[1]));const savedHash=hash(JSON.stringify(saved));
-  rows.set(ids[1],{...saved,title:'synthetic corruption'});
-  if(hash(JSON.stringify(saved))!==savedHash)throw new Error('모의 메모 사본 검증 실패');
-  rows.set(saved.id,structuredClone(saved));
-  check('B_restored_snapshot_hash',hash(JSON.stringify(rows.get(saved.id))),savedHash);
+  // Both drills call the actual restore handler. The synthetic DB adapter holds the private snapshots.
+  const saved=snapshots.get(ids[1]),otherBefore=hash(JSON.stringify(rows.get(ids[0])));
+  const oldAudit=JSON.stringify(audit),oldAuditLength=audit.length;
+  for(const phase of ['modified','deleted']){
+    if(phase==='modified')rows.set(ids[1],{...saved.row,title:'synthetic corruption'});
+    else rows.delete(ids[1]);
+    const res=response();
+    await restore({method:'POST',url:'/api/restore',query:{},headers:{authorization:tb},body:{id:ids[1]}},res);
+    check(`B_${phase}_restore_status`,res.statusCode,200);
+    check(`B_${phase}_restore_id`,res.body.id,saved.row.id);
+    check(`B_${phase}_restore_owner`,res.body.owner_id,saved.row.owner_id);
+    check(`B_${phase}_restore_content_hash`,res.body.hash,saved.hash);
+    check(`B_${phase}_restored_row_id`,rows.get(ids[1]).id,saved.row.id);
+    check(`B_${phase}_restored_row_owner`,rows.get(ids[1]).owner_id,saved.row.owner_id);
+    check(`B_${phase}_restored_row_hash`,noteContentHash(rows.get(ids[1]).title,rows.get(ids[1]).content),saved.hash);
+    check(`B_${phase}_other_notes_preserved`,hash(JSON.stringify(rows.get(ids[0]))),otherBefore);
+    check(`B_${phase}_old_audit_preserved`,JSON.stringify(audit.slice(0,oldAuditLength)),oldAudit);
+  }
   for(let i=0;i<2;i++) {
     const label=i===0?'A':'B',bearer=i===0?ta:tb,own=ids[i],other=ids[1-i];
     const list=await call('GET',bearer);check(`${label}_own_list`,list.statusCode,200);
@@ -145,13 +173,17 @@ export async function checkRecovery({ projectRoot=root } = {}) {
     if(!detection.every(x=>x.passed))throw new Error('복원 뒤 탐지 재시험 실패');
     retests.push(...await apiRetest());
     const sources={};
-    for(const file of ['src/recovery-policy.mjs','scripts/check-recovery.mjs','src/verify-login.mjs','src/decider.mjs','src/detect.mjs','api/notes.js','api/notices.js']) {
+    for(const file of ['src/recovery-policy.mjs','scripts/check-recovery.mjs','src/verify-login.mjs','src/decider.mjs','src/detect.mjs','api/notes.js','api/notices.js','api/restore.js','src/note-integrity.mjs']) {
       sources[file]=hash(await readFile(join(projectRoot,file)));
     }
+    const tupleChecks=retests.filter(x=>/^B_(modified|deleted)_(restore_|restored_row_)/u.test(x.name));
+    const preservationChecks=retests.filter(x=>/^B_(modified|deleted)_(other_notes|old_audit)_preserved$/u.test(x.name));
     return {schema:'aleph.recovery.verification.v1',executedAt:new Date().toISOString(),
       command:'npm run recovery:check',scope:'local_synthetic_only',backupVersion:baseline.version,
       backupCommit:baseline.commit,backupHash:baseline.sourceSha256,checks,retests,sources,
       backupVerified:checks.every(x=>x.passed),retestPassed:retests.every(x=>x.passed),
+      restoreMatched:tupleChecks.length===14&&tupleChecks.every(x=>x.passed),
+      preservationPassed:preservationChecks.length===4&&preservationChecks.every(x=>x.passed),
       unexecuted:['live_browser_B_restore','engine_revocation_and_timing'],productionPolicyChanged:false};
   } finally {await rm(sandbox,{recursive:true,force:true});}
 }
@@ -161,6 +193,7 @@ if(process.argv[1]&&resolve(process.argv[1])===resolve(import.meta.filename)) {
     const report=await checkRecovery();
     if(process.argv.includes('--write'))await writeFile(join(root,'recovery/verification.json'),JSON.stringify(report,null,2)+'\n');
     console.log(JSON.stringify({backupVerified:report.backupVerified,retestPassed:report.retestPassed,
+      restoreMatched:report.restoreMatched,preservationPassed:report.preservationPassed,
       backupChecks:report.checks.length,retests:report.retests.length,scope:report.scope}));
   } catch(error){console.error('복구 점검 첫 오류:',error.message);process.exitCode=1;}
 }

@@ -34,7 +34,9 @@ test('strict self-checks preserve the submission schema when all actual response
     const attempts = await runAttackChecks(config, { requirePass: true });
     assert.equal(attempts.length, 20);
     const local = attempts.filter(attempt => attempt.attackId.startsWith('local_'));
-    assert.equal(local.length, 5);
+    assert.equal(local.length, 3);
+    assert.ok(attempts.some(x => x.attackId === 'single_note_restore_matches'));
+    assert.ok(attempts.some(x => x.attackId === 'restore_preserves_other_records'));
     assert.ok(attempts.some(x => x.attackId === 'backup_verified'));
     assert.ok(attempts.some(x => x.attackId === 'post_restore_retest'));
     assert.ok(local.every(attempt => attempt.observed.includes('로컬 가상 사건:') && attempt.observed.includes('실제')));
