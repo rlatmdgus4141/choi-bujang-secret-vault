@@ -103,3 +103,10 @@ npm run xdr:privilege:respond는 가상 사건 시각으로 재생하며 후보 
 단독 격리 실행, 새 입력, 정상/애매한 작업, 만료/중복, 다른 계정 보존과 세션 맥락 시험 9개 통과.
 자세한 근거와 재현은 docs/XDR_PRIVILEGE.md를 참고합니다. 심판 통과는 별도 판정입니다.
 
+
+## XDR 06 · 자료 반출
+
+`npm run xdr:run -- exfiltration`으로 30건을 판단합니다(block 10 / alert 10 / record 10, 정상 차단 0).
+`npm run xdr:exfiltration:read`는 가린 다섯 항목을 출력하고, `npm run xdr:exfiltration:respond`는 가상 시계로 목적지 추가 거부 규칙만 재생합니다.
+원본 경보와 기존 판정 규칙은 보존합니다. 실제 운영 목적지 매핑과 방화벽 집행은 미검증입니다.
+근거·경계조건·단독 실행·목적지 범위 확인은 `docs/XDR_EXFILTRATION.md`, `test/xdr-exfiltration.test.mjs`에 있습니다.
