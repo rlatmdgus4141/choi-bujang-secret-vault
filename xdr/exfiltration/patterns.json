@@ -1,0 +1,44 @@
+[
+  {
+    "name": "large_transfer_to_new_destination",
+    "technique": "T1048",
+    "relatedTechniques": [
+      "T1041"
+    ],
+    "condition": "처음 보는 목적지로 50,000,000바이트 이상이 실제 외부 전송된 복합 신호를 찾는다. 용량이나 목적지 하나만으로 차단하지 않는다.",
+    "evidence": "T1048은 기존 명령 통로와 다른 프로토콜을 통한 자료 반출을 설명한다. 새 목적지와 용량을 결합한 50MB 기준은 이 학습 정책이다.",
+    "source": "https://attack.mitre.org/techniques/T1048/"
+  },
+  {
+    "name": "repeated_large_external_transfer",
+    "technique": "T1041",
+    "relatedTechniques": [
+      "T1048"
+    ],
+    "condition": "같은 목적지 또는 명령 통로로 대용량 전송이 5회 이상 반복되는 경보 요약과 전송량을 대조한다. 단일 경보의 count와 설명이 충돌하면 차단하지 않는다.",
+    "evidence": "T1041은 기존 명령 통로로 데이터를 반출하는 기법이다. 반복 전송 상관 분석과 5회 기준은 학습 정책이며 기법의 고정 수치가 아니다.",
+    "source": "https://attack.mitre.org/techniques/T1041/"
+  },
+  {
+    "name": "off_hours_archive_or_repeated_transfer",
+    "technique": "T1048",
+    "relatedTechniques": [
+      "T1041",
+      "T1560"
+    ],
+    "condition": "검증된 경보 요약의 업무 시간 밖 신호가 압축 파일 외부 반출 또는 같은 목적지 반복 대용량 전송과 겹치는지 확인한다. 시각과 압축 파일 생성만으로 차단하지 않는다.",
+    "evidence": "T1048은 다른 프로토콜로 반출하는 기법이며 T1560은 전송 전 압축을 설명한다. 압축이나 업무 시간 밖 활동 하나는 반출 성공의 증거가 아니다.",
+    "source": "https://attack.mitre.org/techniques/T1048/",
+    "additionalSource": "https://attack.mitre.org/techniques/T1560/"
+  },
+  {
+    "name": "bulk_copy_or_unusual_protocol",
+    "technique": "T1048",
+    "relatedTechniques": [
+      "T1041"
+    ],
+    "condition": "평소와 다른 포트/프로토콜로 다수 파일이 연속 반출되거나 짧은 시간에 전체 자료가 외부로 복사되는 신호를 용량과 함께 확인한다.",
+    "evidence": "T1048은 대체 프로토콜 반출을 다루며 T1041은 기존 통로 반출을 다룬다. 포트 이상 또는 전체 복사 요약과 용량/파일 수의 조합은 학습 탐지 정책이다.",
+    "source": "https://attack.mitre.org/techniques/T1048/"
+  }
+]

@@ -24,7 +24,9 @@
     "xdr:persistence:read": "node xdr/persistence/read-alerts.mjs",
     "xdr:persistence:respond": "node scripts/xdr-persistence-replay.mjs persistence",
     "xdr:privilege:read": "node xdr/privilege/read-alerts.mjs",
-    "xdr:privilege:respond": "node scripts/xdr-privilege-replay.mjs privilege"
+    "xdr:privilege:respond": "node scripts/xdr-privilege-replay.mjs privilege",
+    "xdr:exfiltration:read": "node xdr/exfiltration/read-alerts.mjs",
+    "xdr:exfiltration:respond": "node scripts/xdr-exfiltration-replay.mjs exfiltration"
   },
   "engines": {
     "node": ">=22"
