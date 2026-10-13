@@ -1,0 +1,26 @@
+[
+  {
+    "name": "log4shell_remote_lookup",
+    "technique": "T1190",
+    "cve": "CVE-2021-44228",
+    "condition": "요청 주소·인자·머리글 안의 완전한 JNDI LDAP/LDAPS/RMI 원격 조회 구문을 찾는다. 한 건이라도 구문과 출발 주소가 명확할 때만 차단 후보로 삼는다.",
+    "evidence": "Apache의 CVE-2021-44228 설명은 공격자가 통제한 로그·인자의 JNDI LDAP 등 원격 엔드포인트로 임의 코드 실행이 가능함을 명시한다.",
+    "source": "https://logging.apache.org/security.html#cve-2021-44228"
+  },
+  {
+    "name": "log4shell_partial_or_probe",
+    "technique": "T1190",
+    "cve": "CVE-2021-44228",
+    "condition": "불완전한 JNDI 구문·DNS 조회형 점검 또는 T1190 상관 경보를 검토한다. 취약점 이름과 jndi 단어만으로 차단하지 않는다.",
+    "evidence": "MITRE T1190은 인터넷 공개 앱의 취약점 악용을 다룬다. 이름이나 불완전한 흔적은 성공한 악용의 증거가 아니므로 알림에만 사용한다.",
+    "source": "https://attack.mitre.org/techniques/T1190/"
+  },
+  {
+    "name": "known_cve_scanner_review",
+    "technique": "T1190",
+    "cve": "CVE-2021-44228",
+    "condition": "log4j-scan 등 취약점 전용 점검 도구 흔적을 확인한다. 점검 도구 이름만 있는 요청은 알림으로 남기며 일반 curl·브라우저 이름은 근거로 삼지 않는다.",
+    "evidence": "log4j-scan 공식 저장소는 HTTP 머리글과 GET/POST 인자 등을 검사하는 CVE-2021-44228 점검 도구임을 설명한다. 도구 흔적은 검토 근거이며 악용 확정 근거는 아니다.",
+    "source": "https://github.com/fullhunt/log4j-scan"
+  }
+]

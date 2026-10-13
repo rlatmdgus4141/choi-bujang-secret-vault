@@ -18,7 +18,9 @@
     "xdr:web:respond": "node scripts/xdr-web-replay.mjs",
     "test": "node --test test/*.test.mjs",
     "test:stage2": "node --test test/stage2.test.mjs",
-    "check:stage2": "node scripts/check-stage2.mjs"
+    "check:stage2": "node scripts/check-stage2.mjs",
+    "xdr:cve:read": "node xdr/known-cve/read-alerts.mjs",
+    "xdr:cve:respond": "node scripts/xdr-known-cve-replay.mjs known-cve"
   },
   "engines": {
     "node": ">=22"
