@@ -2,16 +2,6 @@
 // Do not expose this as an API accepting browser-supplied deviceRegistered or subjectId.
 export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required', 'resource_zones']);
 
-// Explicit access grant for the documented synthetic resource in scripts/fixture-7.mjs.
-// These public practice identifiers are NOT real users or inferred production ownership.
-// No grant is learned from incoming requests; changing any scope component must deny demo access.
-const PRACTICE_READ_GRANT = Object.freeze({
-  classId: 'class_fixture', projectId: 'project_fixture', subjectId: 'learner_fixture',
-  deviceId: 'aaaaaaaaaaaaaaaa', service: 'notes', method: 'GET',
-  path: '/notes/demo', route: 'GET /notes/:id',
-});
-
-
 // Only engine-delivered fields are inspected. Missing values stay missing; headers are never read.
 function connectionContext(request) {
   const signals = request.signals;
@@ -44,70 +34,44 @@ function recentlyVerified(stepUp) {
     && stepUp.authAgeSeconds >= 0 && stepUp.authAgeSeconds <= 900;
 }
 
-const GRANT_FIELDS = Object.freeze([
-  'classId', 'projectId', 'subjectId', 'deviceId', 'service', 'method', 'path', 'route',
-]);
-
-// Syntax only. Passing this function is never an authorization decision.
-function knownResourceRoute(grant) {
-  if (!['notes', 'notices'].includes(grant.service)) return false;
-  return [`/${grant.service}`, `/api/${grant.service}`].some(base => {
-    if (grant.path === base && grant.route === `${grant.method} ${base}`) {
-      return ['GET', 'POST'].includes(grant.method);
+// Route authorization only. The contract has no owner or instructor role.
+// Individual ownership and current instructor authority are rechecked by the final API.
+function resourceRouteAllowed(request) {
+  if (!['notes', 'notices'].includes(request.service) || typeof request.path !== 'string'
+      || typeof request.route !== 'string' || request.queryLength !== 0) return false;
+  return [`/${request.service}`, `/api/${request.service}`].some(base => {
+    if (request.path === base && request.route === `${request.method} ${base}`) {
+      // No unscoped personal-note listing. Notice reads are shared; no notice writes are authorized here.
+      return request.service === 'notes' ? request.method === 'POST' : request.method === 'GET';
     }
-    if (!grant.path.startsWith(`${base}/`) || grant.route !== `${grant.method} ${base}/:id`) return false;
-    const id = grant.path.slice(base.length + 1);
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id);
-    if (!uuid) return grant.path === '/notes/demo' && grant.service === 'notes' && grant.method === 'GET';
-    return (grant.service === 'notes' ? ['GET', 'PUT', 'DELETE'] : ['GET', 'PUT']).includes(grant.method);
+    if (!request.path.startsWith(`${base}/`) || request.route !== `${request.method} ${base}/:id`) return false;
+    const id = request.path.slice(base.length + 1);
+    // Safe opaque resource IDs include the documented practice ID; functional endpoints are never IDs.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u.test(id)
+        || /^(?:export|list|all|search|bulk|download|admin|notices|announcements|instructor)$/iu.test(id)) return false;
+    return (request.service === 'notes' ? ['GET', 'PUT', 'DELETE'] : ['GET']).includes(request.method);
   });
 }
 
-// Server initialization only. This factory is not an HTTP API and never reads grants from requests.
-// Enrollment must provide engine pseudonyms; raw Supabase UUIDs are not inferred to be subjectIds.
-export function createDecider({ grants = [] } = {}) {
-  if (!Array.isArray(grants)) throw new TypeError('Invalid resource policy');
-  const policy = Object.freeze(grants.map(grant => {
-    if (!grant || typeof grant !== 'object' || Array.isArray(grant)
-        || Object.keys(grant).length !== GRANT_FIELDS.length
-        || !GRANT_FIELDS.every(key => Object.hasOwn(grant, key))
-        || !GRANT_FIELDS.every(key => typeof grant[key] === 'string' && grant[key].length > 0
-          && grant[key].length <= 256 && !/[\s*]/u.test(key === 'route'
-            ? grant[key].replace(/^[A-Z]+ /u, '') : grant[key]))
-        || !/^[a-f0-9]{16}$/u.test(grant.deviceId) || !knownResourceRoute(grant)) {
-      throw new TypeError('Invalid resource grant');
-    }
-    return Object.freeze(Object.fromEntries(GRANT_FIELDS.map(key => [key, grant[key]])));
-  }));
-  return async function decide(request) {
-    const reply = (decision, reasonCode, ruleId) => ({
-      schema: 'aleph.decision.v1', requestId: request?.requestId,
-      decision, reasonCode, ruleIds: [ruleId],
-    });
-    if (request?.deviceRegistered !== true) {
-      return reply('deny', 'device_not_registered', 'device_registered');
-    }
-    if (request.schema !== 'aleph.decision.v1') {
-      return reply('deny', 'starter_not_ready', 'starter.deny');
-    }
-    const context = connectionContext(request);
-    if (!context) return reply('deny', 'starter_not_ready', 'starter.deny');
-    const granted = request.queryLength === 0 && policy.some(grant =>
-      GRANT_FIELDS.every(key => request[key] === grant[key]));
-    // Exact permission is required even for a syntactically valid UUID, a list, or a fresh login.
-    if (!granted || request.path === '/notes/demo' && context.source !== 'judge_fixture') {
-      return reply('deny', 'starter_not_ready', 'resource_zones');
-    }
-    if (context.source === 'judge_fixture' && context.riskCount >= 2 && !recentlyVerified(request.stepUp)) {
-      return reply('step_up', 'step_up_required', 'step_up_required');
-    }
-    return reply('allow', 'approved', 'resource_zones');
-  };
-}
-
-// Only the documented synthetic resource is enrolled in the distributed exercise policy.
-// Unenrolled live resources fail closed. The existing browser API keeps its DB owner checks.
-const defaultDecider = createDecider({ grants: [PRACTICE_READ_GRANT] });
 export async function decide(request) {
-  return defaultDecider(request);
+  const reply = (decision, reasonCode, ruleId) => ({
+    schema: 'aleph.decision.v1', requestId: request?.requestId,
+    decision, reasonCode, ruleIds: [ruleId],
+  });
+  if (request?.deviceRegistered !== true) {
+    return reply('deny', 'device_not_registered', 'device_registered');
+  }
+  if (request.schema !== 'aleph.decision.v1'
+      || !['classId', 'projectId', 'subjectId'].every(key => typeof request[key] === 'string'
+        && request[key].length > 0 && request[key].length <= 256 && !/[\s*]/u.test(request[key]))
+      || typeof request.deviceId !== 'string' || !/^[a-f0-9]{16}$/u.test(request.deviceId)) {
+    return reply('deny', 'starter_not_ready', 'starter.deny');
+  }
+  const context = connectionContext(request);
+  if (!context) return reply('deny', 'starter_not_ready', 'starter.deny');
+  if (!resourceRouteAllowed(request)) return reply('deny', 'starter_not_ready', 'resource_zones');
+  if (context.source === 'judge_fixture' && context.riskCount >= 2 && !recentlyVerified(request.stepUp)) {
+    return reply('step_up', 'step_up_required', 'step_up_required');
+  }
+  return reply('allow', 'approved', 'resource_zones');
 }

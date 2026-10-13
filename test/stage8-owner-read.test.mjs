@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { generateKeyPair, SignJWT, jwtVerify } from 'jose';
 import { createNotesHandler } from '../api/notes.js';
+import { decide } from '../src/decider.mjs';
+import { fixtureRequests } from '../scripts/fixture-7.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 // Signed identities are verified in memory. No real key, password or JWT is stored.
@@ -17,6 +19,13 @@ const authorization = async subject => `Bearer ${await new SignJWT({
 const row = owner => ({ id, title: 'restricted fixture', content: 'test-only', owner_id: owner });
 
 async function read(subject, returned, itemRoute) {
+  if (itemRoute) {
+    // The verified engine pseudonym is not a raw Supabase user UUID. API ownership remains separate.
+    const gate = await decide({ ...fixtureRequests().normal,
+      subjectId: subject === a ? 'fixture_engine_subject_A' : 'fixture_engine_subject_B',
+      path: `/api/notes/${id}`, route: 'GET /api/notes/:id' });
+    assert.equal(gate.decision, 'allow');
+  }
   const calls = [];
   const clientFactory = () => ({
     auth: { async getClaims(value) {

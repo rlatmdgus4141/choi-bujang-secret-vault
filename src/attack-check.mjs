@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { decide, createDecider } from './decider.mjs';
+import { decide } from './decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
@@ -155,20 +155,25 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     if (config.step >= 8) {
       const { normal } = fixtureRequests();
-      const a = { ...normal, path: '/notes/11111111-1111-4111-8111-111111111111' };
-      const grant = Object.fromEntries(['classId','projectId','subjectId','deviceId','service','method','path','route']
-        .map(key => [key, a[key]]));
-      const enrolled = createDecider({ grants: [grant] });
-      const own = await enrolled(a);
-      const other = await enrolled({ ...a, subjectId: 'other_local_subject' });
-      const unknown = await decide(a);
-      const list = await decide({ ...normal, path: '/notes', route: 'GET /notes' });
-      const valid = own.decision === 'allow' && other.decision === 'deny'
-        && unknown.decision === 'deny' && list.decision === 'deny';
-      attempts.push({ attackId: 'local_exact_resource_authorization',
-        expected: '로컬 가상 사건: 명시적 자기 권한만 allow, 상대·미등록 UUID·미등록 목록은 deny',
-        observed: valid ? '로컬 가상 사건: 등록 자기 자원 allow, 상대·미등록 UUID·목록 deny; 실제 심판 시험 아님'
-          : '로컬 정확한 자원 권한 확인 실패' });
+      const id = '11111111-1111-4111-8111-111111111111';
+      const checks = [
+        ...['GET','PUT','DELETE'].map(method => ({ service: 'notes', method,
+          path: `/notes/${id}`, route: `${method} /notes/:id`, decision: 'allow' })),
+        { service: 'notes', method: 'POST', path: '/notes', route: 'POST /notes', decision: 'allow' },
+        { service: 'notes', method: 'GET', path: '/notes', route: 'GET /notes', decision: 'deny' },
+        ...['POST','PUT','PATCH','DELETE'].map(method => ({ service: 'notices', method,
+          path: `/notices/${id}`, route: `${method} /notices/:id`, decision: 'deny' })),
+        { service: 'notes', method: 'GET', path: '/notes/export', route: 'GET /notes/:id', decision: 'deny' },
+      ];
+      let valid = true;
+      for (const check of checks) {
+        const { decision, ...input } = check;
+        valid &&= (await decide({ ...normal, ...input })).decision === decision;
+      }
+      attempts.push({ attackId: 'local_resource_zone_rules',
+        expected: '로컬 가상 사건: 메모 한 건 CRUD/추가 allow, 전체 목록·공지 쓰기·기능 경로 deny',
+        observed: valid ? '로컬 가상 사건: 정상 메모 경로 allow, 전체 목록·공지 쓰기·export deny; 실제 심판 시험 아님, 소유자 비교는 API 시험으로 별도 확인'
+          : '로컬 자원 구역 규칙 확인 실패' });
       passed.push(valid);
     }
     return finish(attempts, passed);
