@@ -22,6 +22,12 @@ export function deploymentIdentity(env, config) {
       new URL('/rest/v1/notes', config.identityProvider.issuer).href) {
     throw new Error('원본 자료 주소는 같은 Supabase 프로젝트의 쿼리 없는 HTTPS 메모 경로여야 합니다.');
   }
+  if (config.step >= 3 && (!Array.isArray(config.allowedRoutes) || !config.allowedRoutes.length
+      || new Set(config.allowedRoutes).size !== config.allowedRoutes.length
+      || config.allowedRoutes.some(route => typeof route !== 'string'
+        || !/^(GET|POST|PUT|PATCH|DELETE) \/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_]*))*$/u.test(route)))) {
+    throw new Error('허용 경로는 GET /api/notes 형식의 중복 없는 문자열 배열이어야 합니다.');
+  }
   return {
     schema: 'aleph.defense.deployment.v1',
     step: config.step,
@@ -33,7 +39,7 @@ export function deploymentIdentity(env, config) {
     ...(config.step >= 3 ? {
       identityProvider: { issuer: config.identityProvider.issuer,
         audience: config.identityProvider.audience, jwksUrl: config.identityProvider.jwksUrl },
-      allowedRoutes: config.allowedRoutes.map(({ method, path }) => ({ method, path })),
+      allowedRoutes: [...config.allowedRoutes],
     } : {}),
     ...(config.step >= 5 ? { originalApiUrl: config.originalApiUrl } : {}),
   };

@@ -1,5 +1,16 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 8단계 저장점 · 메모 목록 경로 선언 보완
+
+UNV_NOTES_ROUTE_UNKNOWN 보완으로 allowedRoutes를 "GET /api/notes" 같은 문자열 배열로 통일합니다.
+빌드가 생성하는 /aleph.json과 제출 묶음도 같은 값을 내보내도록 했습니다.
+사이트 200·메타데이터 200·무로그인 메모 목록 401 JSON, 화면의 /api/notes 호출을 직접 대조했습니다.
+객체 배열의 형식 인식 문제를 유력한 원인으로 보고 보완하며, 심판 내부 원인이나 재판정 통과는 아직 확정하지 않습니다.
+경로 선언의 잘못된 형식/중복과 선언 API 파일 존재를 시험합니다.
+판정기 구역 규칙, API·로그인·화면·DB·기존 XDR는 그대로 유지합니다.
+재현: npm test, node --test test/route-declarations.test.mjs, 배포 완료 뒤 npm run bundle.
+자세한 대조 결과는 docs/STAGE8_VERIFICATION.md에 있습니다. 아래 저장점은 이전 이력입니다.
+
 ## 8단계 저장점 · 수정 공지 반영
 
 판정기의 공지 쓰기(POST·PUT·PATCH·DELETE)와 메모 전체 목록 GET은 항상 거부합니다.
