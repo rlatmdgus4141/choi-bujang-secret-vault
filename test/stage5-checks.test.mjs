@@ -12,6 +12,7 @@ const identity = () => ({
   identityProvider: structuredClone(config.identityProvider),
   allowedRoutes: structuredClone(config.allowedRoutes),
   originalApiUrl: config.originalApiUrl,
+  restoreRoute: config.restoreRoute,
   // Vercel records the immutable deployment URL, not the production alias.
   publicAppUrl: 'https://fixture-deployment.vercel.app',
 });
@@ -44,6 +45,8 @@ test('strict self-checks preserve the submission schema when all actual response
 test('strict self-checks reject leaked static data, permitted app access and direct API regressions', async () => {
   const previous = globalThis.fetch;
   const regressions = [
+    { id: 'anonymous_note_create', match: url => url.pathname === '/api/restore',
+      response: () => Response.json({ restored: true }) },
     { id: 'static_note_seed_read', match: (url) => url.pathname === '/data.json',
       response: () => Response.json({ notes: [{}] }) },
     { id: 'anonymous_note_read', match: (url, init) => url.pathname === '/api/notes'
@@ -79,6 +82,7 @@ test('strict self-checks reject leaked static data, permitted app access and dir
 test('deployment verification rejects stale identity and mismatched auth, routes or original API', () => {
   assert.doesNotThrow(() => assertDeploymentMetadata(identity(), config, commit));
   const mismatches = [
+    ['restoreRoute', value => { value.restoreRoute = '/api/other'; }],
     ['step', value => { value.step = 4; }],
     ['repoUrl', value => { value.repoUrl = 'https://github.com/fixture/other'; }],
     ['commit', value => { value.commit = 'b'.repeat(40); }],

@@ -1,5 +1,20 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 10단계 저장점 · 사본 검증과 한 건 복구
+
+9단계는 사용자 심판 결과 100점으로 확인했습니다. 같은 화면·주소·로그인·본인 CRUD·구역 제한·탐지·XDR를 유지합니다.
+검증된 9단계 정책 사본을 해시로 대조하고 시험 정책 한 파일만 미리보기·확인 번호를 거쳐 복원합니다.
+메모 사본은 Supabase 비공개 스키마 안에 보관하고, 생성 시점 사본을 수정·삭제로 덮어쓰지 않습니다.
+POST /api/restore는 기존 검증 로그인 사용자의 지정 메모 한 건만 ID·소유자·해시를 대조해 복원합니다.
+기존 감사는 보존하고 복구 감사만 추가합니다. 원본 직접 권한과 기존 판정기 규칙을 느슨하게 만들지 않습니다.
+
+재현: npm run recovery:policy:preview → 변경 범위 확인 → npm run recovery:policy:restore -- --confirm <확인 번호>.
+시험: npm run test:recovery, npm test, npm run decider:test, npm run fixture:7, npm run detect:test.
+DB의 B 메모 변조/삭제 복구·타인 거부·다른 행/감사 보존·손상 사본 거부를 트랜잭션에서 확인하고 롤백했습니다.
+브라우저 B의 실제 HTTP 복구와 운영 심판 재판정은 미실행입니다. 배포 뒤 npm run bundle로 응답을 대조합니다.
+복구 경로·사본 범위·1~9 재시험 순서와 미검증 항목은 docs/STAGE10_VERIFICATION.md에 있습니다.
+아래 저장점은 이전 작업 이력입니다.
+
 ## 9단계 저장점 · 탐지와 회수 제안
 
 8단계는 사용자 심판 결과 100점으로 확인했습니다. 이번 변경은 별도 detect(events) 탐지 함수입니다.

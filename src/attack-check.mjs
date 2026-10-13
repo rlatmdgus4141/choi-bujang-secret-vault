@@ -3,6 +3,7 @@ import { decide } from './decider.mjs';
 import { detect } from './detect.mjs';
 import { checkDetection } from '../scripts/detect-test.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
+import { previewPolicy } from './recovery-policy.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
@@ -14,7 +15,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -63,8 +64,20 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         denied = api.status === 401 && Object.keys(data).length === 1
           && typeof data.error === 'string';
       } catch { /* 오류 응답 원문은 제출하지 않습니다. */ }
+      if (config.step >= 10 && check.attackId === 'anonymous_note_create') {
+        const restore = await fetch(new URL(config.restoreRoute, app), {
+          method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000),
+        });
+        try {
+          const data = await restore.json();
+          denied &&= restore.status === 401 && Object.keys(data).length === 1
+            && typeof data.error === 'string';
+        } catch { denied = false; }
+      }
       attempts.push({ attackId: check.attackId, expected: '유효한 로그인 없이 메모 접근 거부',
-        observed: denied ? 'HTTP 401, 메모 없는 오류 응답 확인'
+        observed: denied ? (config.step >= 10 && check.attackId === 'anonymous_note_create'
+          ? '메모 추가·복구 POST 모두 HTTP 401 JSON, 자료 없는 오류 응답 확인'
+          : 'HTTP 401, 메모 없는 오류 응답 확인')
           : `인증 거부 확인 실패 (HTTP ${api.status})` });
       passed.push(denied);
     }
@@ -175,6 +188,10 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       if (config.step >= 9) {
         const detections = await checkDetection(detect);
         valid &&= detections.every(item => item.passed);
+      }
+      if (config.step >= 10) {
+        const plan = await previewPolicy(new URL('..', import.meta.url).pathname);
+        valid &&= plan.changes.length === 0 && plan.productionChanged === false;
       }
       attempts.push({ attackId: config.step >= 9 ? 'local_zone_and_detection_rules' : 'local_resource_zone_rules',
         expected: config.step >= 9

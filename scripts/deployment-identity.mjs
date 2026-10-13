@@ -11,7 +11,7 @@ export function deploymentIdentity(env, config) {
   if (env.VERCEL_GIT_PROVIDER !== 'github' || !OWNER.test(owner || '')
       || !REPO.test(repo || '') || repo === '.' || repo === '..'
       || repo.toLowerCase().endsWith('.git') || !SHA.test(commit || '')
-      || !HOST.test(host || '') || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config?.step)
+      || !HOST.test(host || '') || ![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config?.step)
       || typeof config.judgeIssuer !== 'string'
       || !/^https:\/\/[a-z0-9-]+\.up\.railway\.app\/defense\/judge$/iu.test(config.judgeIssuer)
       || typeof config.sampleMarker !== 'string'
@@ -28,6 +28,10 @@ export function deploymentIdentity(env, config) {
         || !/^(GET|POST|PUT|PATCH|DELETE) \/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_]*)(?:\/(?:[A-Za-z0-9_-]+|:[A-Za-z][A-Za-z0-9_]*))*$/u.test(route)))) {
     throw new Error('허용 경로는 GET /api/notes 형식의 중복 없는 문자열 배열이어야 합니다.');
   }
+  if (config.step >= 10 && (config.restoreRoute !== "/api/restore"
+      || !config.allowedRoutes.includes("POST /api/restore"))) {
+    throw new Error("검증된 복구 POST 경로를 설정하세요.");
+  }
   return {
     schema: 'aleph.defense.deployment.v1',
     step: config.step,
@@ -42,5 +46,6 @@ export function deploymentIdentity(env, config) {
       allowedRoutes: [...config.allowedRoutes],
     } : {}),
     ...(config.step >= 5 ? { originalApiUrl: config.originalApiUrl } : {}),
+    ...(config.step >= 10 ? { restoreRoute: config.restoreRoute } : {}),
   };
 }
