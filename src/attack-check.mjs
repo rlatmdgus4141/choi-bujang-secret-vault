@@ -175,7 +175,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         const metadata=await response.json();
         const evidence=await fetch(new URL('/operations-verification.json',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
         const report=await evidence.json();
-        const valid=response.status===200&&response.headers.has('x-vault-request-id')
+        const valid=response.status===200&&Boolean(response.headers.get('x-vault-request-id'))
           &&Number.isFinite(Date.parse(response.headers.get('x-vault-checked-at')))
           &&metadata.step===12&&metadata.engine?.name==='ALEPH SDP 엔진'
           &&metadata.officialAttacks?.verified===0&&metadata.officialAttacks?.status==='unexecuted'

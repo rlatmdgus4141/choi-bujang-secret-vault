@@ -1,5 +1,13 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 12단계 보완 저장점 · 응답 헤더 호환
+
+심판의 첫 오류 `response.headers.has is not a function`을 get만 제공하는 응답으로 재현했습니다.
+제출 점검 한 곳의 has 호출을 get으로 바꿨으며, 실제 요청 ID와 확인 시각이 누락되면 여전히 실패합니다.
+보고서의 성공 표시만으로 통과시키지 않는지 헤더 누락 시험도 확인합니다.
+이 변경은 화면 수치·보호 API·판정/탐지·DB를 수정하지 않습니다.
+재현: `node --test test/stage5-checks.test.mjs` → `npm test` → 검사한 main 커밋 운영 배포 → `npm run bundle`.
+
 ## 12단계 보완 저장점 · path_format
 
 심판 45점 기록의 첫 오류는 제출 묶음의 `path_format`입니다.

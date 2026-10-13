@@ -49,7 +49,12 @@ test('strict self-checks preserve the submission schema when all actual response
       assert.ok(['GET', 'HEAD'].includes(init.method ?? 'GET'));
       assert.equal(new URL(url).protocol, 'https:');
       assert.equal(init.redirect, 'error');
-      return passingResponse(url);
+      const response = passingResponse(url);
+      // The judge exposes get(), but not the complete browser Headers API.
+      return { status: response.status, ok: response.ok,
+        headers: { get: name => response.headers.get(name) },
+        json: () => response.json(), text: () => response.text(),
+        arrayBuffer: () => response.arrayBuffer() };
     };
     const attempts = await runAttackChecks(config, { requirePass: true });
     assert.equal(attempts.length, 20);
@@ -74,6 +79,15 @@ test('strict self-checks preserve the submission schema when all actual response
 test('strict self-checks reject leaked static data, permitted app access and direct API regressions', async () => {
   const previous = globalThis.fetch;
   const regressions = [
+    ...['x-vault-request-id', 'x-vault-checked-at'].map(header => ({
+      id: 'operations_evidence_and_installable_app',
+      match: url => url.pathname === '/api/operations',
+      response: () => {
+        const response = passingResponse(`${config.publicAppUrl}/api/operations`);
+        response.headers.delete(header);
+        return response;
+      },
+    })),
     { id: 'static_note_seed_read', match: (url) => url.pathname === '/data.json',
       response: () => Response.json({ notes: [{}] }) },
     { id: 'anonymous_note_read', match: (url, init) => url.pathname === '/api/notes'
