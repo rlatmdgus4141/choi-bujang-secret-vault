@@ -45,15 +45,18 @@ export async function decide(request) {
   const identityPresent = typeof request.subjectId === 'string' && request.subjectId.trim().length > 0;
   const devicePresent = typeof request.deviceId === 'string' && /^[a-f0-9]{16}$/u.test(request.deviceId);
   // Route is an engine-confirmed method/template pair, never a prefix or browser selector.
-  // The contract's IDs are opaque (the supplied fixture uses "demo"); reserved action names are not IDs.
+  // Live resources use the same UUID format as the final API. Arbitrary slugs are not resource IDs.
+  // Keep the starter's documented read-only /notes/demo practice resource; it is not a live UUID.
   const zoneRoute = ['notes', 'notices'].some(resource => {
     if (request.service !== resource) return false;
     return [`/${resource}`, `/api/${resource}`].some(base => {
       const list = request.path === base && request.route === `${request.method} ${base}`;
-      const item = typeof request.path === 'string' && request.path.startsWith(`${base}/`)
-        && /^[A-Za-z0-9_-]+$/u.test(request.path.slice(base.length + 1))
-        && !['export', 'import', 'search', 'bulk', 'admin'].includes(request.path.slice(base.length + 1).toLowerCase())
-        && request.route === `${request.method} ${base}/:id`;
+      const id = typeof request.path === 'string' && request.path.startsWith(`${base}/`)
+        ? request.path.slice(base.length + 1) : '';
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id);
+      const practiceRead = resource === 'notes' && base === '/notes'
+        && id === 'demo' && request.method === 'GET';
+      const item = (uuid || practiceRead) && request.route === `${request.method} ${base}/:id`;
       // No teacher/ownership assertion exists in this contract. Notices mutations fail closed here.
       // A notes allow is only the route gate: the final API must atomically constrain owner_id.
       return resource === 'notes'

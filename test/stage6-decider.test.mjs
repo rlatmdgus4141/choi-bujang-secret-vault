@@ -7,7 +7,7 @@ const normal = fixtureRequests().normal;
 test('stage 6 allows only registered note reads and preserves the five-field response', async () => {
   const before = JSON.stringify(normal);
   for (const base of ['/notes', '/api/notes']) {
-    for (const [route, path] of [[`GET ${base}`, base], [`GET ${base}/:id`, `${base}/demo`]]) {
+    for (const [route, path] of [[`GET ${base}`, base], [`GET ${base}/:id`, `${base}/11111111-1111-4111-8111-111111111111`]]) {
       const out = await decide({ ...normal, route, path });
       assert.deepEqual(out, { schema: 'aleph.decision.v1', requestId: normal.requestId,
         decision: 'allow', reasonCode: 'approved', ruleIds: ['resource_zones'] });

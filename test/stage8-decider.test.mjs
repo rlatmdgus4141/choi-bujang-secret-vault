@@ -8,7 +8,7 @@ test('stage 8 gates exact note CRUD routes and read-only notices without changin
   for (const base of ['/notes', '/api/notes']) {
     for (const [method, path, route] of [
       ['GET', base, base], ['POST', base, base],
-      ...['GET', 'PUT', 'DELETE'].map(method => [method, `${base}/note-id`, `${base}/:id`]),
+      ...['GET', 'PUT', 'DELETE'].map(method => [method, `${base}/11111111-1111-4111-8111-111111111111`, `${base}/:id`]),
     ]) {
       const out = await decide({ ...normal, method, path, route: `${method} ${route}` });
       assert.equal(out.decision, 'allow');
@@ -35,4 +35,21 @@ test('unknown paths, reserved operations, nested/encoded paths, service mismatch
     { queryLength: 1 }, { queryLength: undefined }, { deviceRegistered: false }]) {
     assert.equal((await decide({ ...normal, ...patch })).decision, 'deny');
   }
+});
+
+
+test('stage 8 rejects every non-UUID live resource, including other-zone and notice-like slugs', async () => {
+  const ids = ['other-user', 'another-zone', 'teacher-notice', 'notice-id', 'note-id',
+    'random-resource', '11111111-1111-4111-8111-11111111111z'];
+  for (const base of ['/notes', '/api/notes']) for (const id of ids) {
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      const result = await decide({ ...normal, method, path: `${base}/${id}`, route: `${method} ${base}/:id` });
+      assert.equal(result.decision, 'deny', `${method} ${base}/${id}`);
+    }
+  }
+  assert.equal((await decide(normal)).decision, 'allow');
+  for (const method of ['PUT', 'DELETE']) {
+    assert.equal((await decide({ ...normal, method, route: `${method} /notes/:id` })).decision, 'deny');
+  }
+  assert.equal((await decide({ ...normal, path: '/api/notes/demo', route: 'GET /api/notes/:id' })).decision, 'deny');
 });

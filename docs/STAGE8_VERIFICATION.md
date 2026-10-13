@@ -59,3 +59,12 @@ B로 A의 메모를 직접 조회/수정/삭제하면 404, 학생의 /api/notice
 
 근거: https://supabase.com/docs/reference/javascript/auth-admin-getuserbyid
 https://supabase.com/docs/guides/database/postgres/row-level-security#authjwt
+
+## 첫 제출 실패 후 최소 보완
+
+S08_OTHER_ZONE_ALLOWED, 심판 커밋 62e9d01214d1. 이전 로컬 시험에서 임의 note-id 문자열을
+정상 경로로 간주했던 부분을 수정했습니다. 판정기는 실제 API와 동일한 UUID만 자원 ID로 받습니다.
+공식 /notes/demo는 문서화된 GET 연습 자원으로만 유지하며 API나 수정 경로에는 적용하지 않습니다.
+회귀 시험은 알려진 공격 문자열만 차단하지 않고 임의 비UUID 문자열 전체가 거부되는지 확인합니다.
+원본 fixture-7.mjs와 로그인 검증 도우미는 변경하지 않습니다.
+이 수정은 경로 과잉 허용에 대한 최소 보완입니다. 심판 재제출 성공이나 판정기 단독 소유권 검증을 주장하지 않습니다.
