@@ -53,3 +53,25 @@ test('stage 8 rejects every non-UUID live resource, including other-zone and not
   }
   assert.equal((await decide({ ...normal, path: '/api/notes/demo', route: 'GET /api/notes/:id' })).decision, 'deny');
 });
+
+
+test('the documented demo resource grant is bound to its subject, device, class and project', async () => {
+  assert.equal((await decide(normal)).decision, 'allow');
+  for (const [key, value] of Object.entries({ subjectId: 'another_subject',
+    deviceId: 'bbbbbbbbbbbbbbbb', classId: 'another_class', projectId: 'another_project' })) {
+    for (const replacement of [value, undefined, '', null]) {
+      const request = { ...normal, [key]: replacement,
+        headers: { 'x-user-id': normal.subjectId, 'x-device-id': normal.deviceId },
+        identity: { sub: normal.subjectId }, role: 'instructor',
+        stepUp: { verified: true, authAgeSeconds: 0 } };
+      assert.equal((await decide(request)).decision, 'deny', key);
+    }
+  }
+  assert.equal((await decide({ ...normal, signals: {
+    source: 'none', region: 'unknown', network: 'unknown', hour: null } })).decision, 'deny');
+  // Repeated requests do not establish ownership or poison a mutable first-seen cache.
+  for (let i = 0; i < 3; i++) {
+    assert.equal((await decide({ ...normal, subjectId: 'another_subject' })).decision, 'deny');
+    assert.equal((await decide(normal)).decision, 'allow');
+  }
+});
