@@ -9,6 +9,7 @@ import { previewPolicy, restoreTestPolicy } from '../src/recovery-policy.mjs';
 import { createRestoreHandler } from '../api/restore.js';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
+import { checkRecovery } from '../scripts/check-recovery.mjs';
 
 async function trial(run) {
   const root = await mkdtemp(join(tmpdir(), 'vault-recovery-'));
@@ -49,7 +50,12 @@ test('missing or corrupt safe copy and stale preview stop without modifying tria
     await assert.rejects(restoreTestPolicy(root, plan.confirmation));
     const unchanged = await readFile(target, 'utf8');
     const path = join(root, 'recovery/policy-baseline.json');
-    const corrupt = JSON.parse(await readFile(path, 'utf8')); corrupt.source += '\n';
+    const validBackup = JSON.parse(await readFile(path, 'utf8'));
+    for (const patch of [{ version: 'unverified version' }, { commit: 'a'.repeat(40) }]) {
+      await writeFile(path, JSON.stringify({ ...validBackup, ...patch }));
+      await assert.rejects(previewPolicy(root), /검증 실패/u);
+    }
+    const corrupt = structuredClone(validBackup); corrupt.source += '\n';
     await writeFile(path, JSON.stringify(corrupt));
     await assert.rejects(previewPolicy(root), /검증 실패/u);
     await rm(path);
@@ -57,6 +63,21 @@ test('missing or corrupt safe copy and stale preview stop without modifying tria
     assert.equal(await readFile(target, 'utf8'), unchanged);
     assert.equal(await readFile(audit, 'utf8'), 'existing-audit\n');
   });
+});
+test('recovery check re-reads a verified copy, restores it, then executes normal and forbidden API/policy requests', async () => {
+  const report = await checkRecovery();
+  assert.equal(report.backupVerified, true);
+  assert.equal(report.retestPassed, true);
+  assert.equal(report.checks.length, 6);
+  assert.equal(report.retests.length, 39);
+  assert.ok(report.checks.every(x => x.passed) && report.retests.every(x => x.passed));
+  assert.equal(report.productionPolicyChanged, false);
+  assert.equal(report.scope, 'local_synthetic_only');
+  assert.ok(report.unexecuted.includes('live_browser_B_restore'));
+  assert.ok(report.retests.some(x => x.name === 'A_other_GET' && x.actual === 404));
+  assert.ok(report.retests.some(x => x.name === 'B_own_read' && x.actual === 200));
+  assert.ok(report.retests.some(x => x.name === 'token_expired' && x.actual === 401));
+  assert.equal(JSON.stringify(report).includes('Bearer'), false);
 });
 
 const pair = await generateKeyPair('ES256');

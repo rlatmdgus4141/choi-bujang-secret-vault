@@ -194,8 +194,9 @@ test('authenticated stages self-check records actual rejection requests without 
     assert.equal(calls.find(call => call.path === '/rest/v1/notes' && call.options.method === 'PATCH').search, '?id=is.null');
     globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
     const failed = await runAttackChecks(config);
-    assert.ok(failed.filter(check => !check.attackId.startsWith('local_')).every(check => check.observed.includes('확인 실패')));
-    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, 7);
+    assert.ok(failed.filter(check => !check.attackId.startsWith('local_')
+      && !['backup_verified', 'post_restore_retest'].includes(check.attackId)).every(check => check.observed.includes('확인 실패')));
+    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, config.step >= 10 ? 5 : 7);
     assert.ok(failed.filter(check => check.attackId.startsWith('local_')).every(check => check.observed.includes('로컬 가상 사건:')));
   } finally { globalThis.fetch = original; }
 });

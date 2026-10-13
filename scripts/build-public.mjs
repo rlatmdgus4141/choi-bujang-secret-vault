@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deploymentIdentity } from './deployment-identity.mjs';
+import { checkRecovery } from './check-recovery.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'data.json');
@@ -32,4 +33,10 @@ if (!process.argv.includes('--local')) {
   await writeFile(resolve(root, 'public', 'aleph.json'),
     `${JSON.stringify(identity, null, 2)}\n`, 'utf8');
   console.log('배포 저장소·커밋·주소를 public/aleph.json에 기록했습니다.');
+  if (config.step >= 10) {
+    const recovery = await checkRecovery();
+    await writeFile(resolve(root, 'public/recovery-verification.json'),
+      `${JSON.stringify({ ...recovery, commit: identity.commit }, null, 2)}\n`, 'utf8');
+    console.log('사본 재검증·시험 복원 뒤 재시험을 실행해 공개 검증 근거를 생성했습니다.');
+  }
 }
