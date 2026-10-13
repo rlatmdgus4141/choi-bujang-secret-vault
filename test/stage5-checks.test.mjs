@@ -85,7 +85,7 @@ test('deployment verification rejects stale identity and mismatched auth, routes
     ['judgeIssuer', value => { value.judgeIssuer += '/other'; }],
     ['identityProvider', value => { value.identityProvider.audience = 'another-service'; }],
     ['allowedRoutes', value => { value.allowedRoutes.pop(); }],
-    ['allowedRoutes', value => { value.allowedRoutes[0].method = 'POST'; }],
+    ['allowedRoutes', value => { value.allowedRoutes[0] = 'POST /api/notes'; }],
     ['originalApiUrl', value => { value.originalApiUrl += '?select=*'; }],
     ['originalApiUrl', value => { delete value.originalApiUrl; }],
   ];
