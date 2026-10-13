@@ -1,0 +1,42 @@
+[
+  {
+    "name": "unexpected_admin_group_change",
+    "technique": "T1098.007",
+    "relatedTechniques": [
+      "T1078"
+    ],
+    "condition": "관리자 그룹 추가가 낯선/원격 접속, 직후 관리자 명령 또는 같은 주소의 여러 계정 승격과 겹치는지 확인한다. 일반 과제 그룹 추가만으로는 차단하지 않는다.",
+    "evidence": "MITRE T1098.007은 계정을 추가 로컬/도메인 그룹에 넣어 높은 권한과 접근을 확보하는 계정 조작을 설명하며 T1078은 정상 계정 악용을 다룬다.",
+    "source": "https://attack.mitre.org/techniques/T1098/007/"
+  },
+  {
+    "name": "abnormal_elevated_session",
+    "technique": "T1068",
+    "relatedTechniques": [
+      "T1078"
+    ],
+    "condition": "새 관리자 권한/세션 변경 직후 권한 명령을 쓰거나 낯선 접속에서 세션이 승격되는 경우, 다른 계정 권한으로 관리자 명령을 실행하는 경우를 확인한다. 단순 관리자 명령 하나는 알림만 남긴다.",
+    "evidence": "T1068은 취약점 악용을 통한 권한 상승을 다룬다. 이 모듈은 상승/사용의 상관 신호를 탐지하며 관리자 명령만으로 취약점 악용 성공을 단정하지 않는다.",
+    "source": "https://attack.mitre.org/techniques/T1068/"
+  },
+  {
+    "name": "off_hours_privileged_execution",
+    "technique": "T1078",
+    "relatedTechniques": [
+      "T1068"
+    ],
+    "condition": "평소 시간 밖에 낯선 접속 맥락에서 관리자 명령이 실행되는 복합 신호를 확인한다. 시각 하나 또는 출발 주소 하나만으로 차단하지 않는다.",
+    "evidence": "T1078의 계정 악용 탐지는 정상 계정의 평소와 다른 활동을 살핀다. 시간과 접속/권한 사용의 결합은 이 과제의 상관 정책이다.",
+    "source": "https://attack.mitre.org/techniques/T1078/"
+  },
+  {
+    "name": "rapid_admin_privilege_reinstatement",
+    "technique": "T1098.007",
+    "relatedTechniques": [
+      "T1078"
+    ],
+    "condition": "관리자 그룹에서 제거된 계정이 5분 안에 다시 그룹에 들어가는 명확한 재승격 요약을 확인한다. 긴 시간 후 승인된 변경이나 숫자 불일치는 자동 차단하지 않는다.",
+    "evidence": "T1098.007의 그룹 조작을 바탕으로 제거 뒤 즉시 재추가되는 변경을 상관 분석한다. 5분 기준은 학습 정책이며 MITRE의 고정 수치가 아니다.",
+    "source": "https://attack.mitre.org/techniques/T1098/007/"
+  }
+]
