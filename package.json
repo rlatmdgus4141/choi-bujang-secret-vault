@@ -19,7 +19,9 @@
     "xdr:cve:read": "node xdr/known-cve/read-alerts.mjs",
     "xdr:cve:respond": "node scripts/xdr-known-cve-replay.mjs known-cve",
     "xdr:persistence:read": "node xdr/persistence/read-alerts.mjs",
-    "xdr:persistence:respond": "node scripts/xdr-persistence-replay.mjs persistence"
+    "xdr:persistence:respond": "node scripts/xdr-persistence-replay.mjs persistence",
+    "xdr:privilege:read": "node xdr/privilege/read-alerts.mjs",
+    "xdr:privilege:respond": "node scripts/xdr-privilege-replay.mjs privilege"
   },
   "engines": {
     "node": ">=22"
