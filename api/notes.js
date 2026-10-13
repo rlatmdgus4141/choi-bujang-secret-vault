@@ -1,3 +1,4 @@
+import { attachEvidence } from '../src/request-evidence.mjs';
 import { verifyDeviceRequest } from '../src/device-access.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
@@ -14,6 +15,7 @@ const ownsNote = (row, userId) => row && typeof row === 'object'
 export function createNotesHandler({ clientFactory = createClient, env = process.env, itemRoute = false, deviceVerifier = verifyDeviceRequest } = {}) {
   let runtime;
   return async function notes(req, res) {
+    attachEvidence(req, res, env);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Vary', 'Authorization');
     res.setHeader('X-Resource-Id', RESOURCE_IDS.notes);

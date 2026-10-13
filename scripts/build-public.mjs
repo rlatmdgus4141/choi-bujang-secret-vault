@@ -1,3 +1,4 @@
+import { checkOperations } from './check-operations.mjs';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deploymentIdentity } from './deployment-identity.mjs';
@@ -8,8 +9,8 @@ const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'data.json');
 const output = resolve(root, 'public', 'data.json');
 const config = JSON.parse(await readFile(resolve(root, 'aleph.config.json'), 'utf8'));
-if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
-  throw new Error('현재 구현된 자료실 단계는 1~11단계입니다.');
+if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) {
+  throw new Error('현재 구현된 자료실 단계는 1~12단계입니다.');
 }
 const data = JSON.parse(await readFile(source, 'utf8'));
 if (!Array.isArray(data.notes)) {
@@ -34,6 +35,10 @@ if (!process.argv.includes('--local')) {
   await writeFile(resolve(root, 'public', 'aleph.json'),
     `${JSON.stringify(identity, null, 2)}\n`, 'utf8');
   console.log('배포 저장소·커밋·주소를 public/aleph.json에 기록했습니다.');
+  if (config.step >= 12) {
+    const operations = await checkOperations();
+    await writeFile(resolve(root,'public/operations-verification.json'), JSON.stringify({...operations,commit:identity.commit},null,2)+'\n');
+  }
   if (config.step >= 10) {
     const recovery = await checkRecovery();
     await writeFile(resolve(root, 'public/recovery-verification.json'),

@@ -8,6 +8,7 @@
     "api/device.js",
     "api/notes.js",
     "api/notices.js",
+    "api/operations.js",
     "api/restore.js",
     "api/threat-intel.js"
   ]

@@ -1,3 +1,4 @@
+import { checkOperations } from '../scripts/check-operations.mjs';
 import { readFileSync } from 'node:fs';
 import { decide } from './decider.mjs';
 import { detect } from './detect.mjs';
@@ -16,7 +17,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -279,6 +280,23 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         observed:installable?'실제 배포의 manifest·PNG 아이콘 2개·오프라인 안내·API 캐시 제외 확인'
           :'설치형 앱 공개 파일 확인 실패'});
       passed.push(installable);
+      if(config.step>=12){
+        const integrated=await checkOperations();
+        const response=await fetch(new URL('/api/operations',app),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+        const metadata=await response.json();
+        const evidence=await fetch(new URL('/operations-verification.json',app),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+        const report=await evidence.json();
+        const valid=integrated.passed&&response.status===200&&response.headers.has('x-vault-request-id')
+          &&Number.isFinite(Date.parse(response.headers.get('x-vault-checked-at')))
+          &&metadata.step===12&&metadata.engine?.name==='ALEPH SDP 엔진'
+          &&metadata.officialAttacks?.verified===0&&metadata.officialAttacks?.status==='unexecuted'
+          &&evidence.ok&&report.commit===metadata.commit&&report.passed===true;
+        attempts[attempts.length-1]={attackId:'operations_evidence_and_installable_app',
+          expected:'설치형 앱 유지, 작전실 API·서버 요청 근거·가상 통합 시험·공식 41종 미실행 구분',
+          observed:valid&&installable?'실제 작전실 API HTTP 200와 서버 요청 ID/시각, 설치 파일 확인; 가상 통합 27건 통과; 공식 41종 미확인'
+            :'작전실 또는 설치형 앱 근거 확인 실패'};
+        passed[passed.length-1]=valid&&installable;
+      }
     }
     return finish(attempts, passed);
   }

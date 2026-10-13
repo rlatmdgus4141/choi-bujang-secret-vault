@@ -32,11 +32,17 @@
     button:disabled { opacity: .55; cursor: wait; }
     :focus-visible { outline: 3px solid #f4cb6b; outline-offset: 3px; }
     #auth-message { color: #ffe3e8; }
+    #operations { margin-top:30px; } #ops-summary { display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+    #ops-summary p { margin:0;padding:12px;border:1px solid #51667c;border-radius:8px;font-size:14px; }
+    .ops-scroll { overflow:auto;margin-top:18px; } table { border-collapse:collapse;width:100%;font-size:13px; }
+    th,td { text-align:left;vertical-align:top;border-bottom:1px solid #51667c;padding:12px 8px;min-width:80px; }
+    td:last-child { overflow-wrap:anywhere;min-width:180px; } caption { text-align:left;margin:12px 0;color:#bfd0e5; }
+    select { font:inherit;background:#101a28;color:#ecf4ff;padding:10px;border-radius:8px;max-width:100%; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 11단계</div>
+    <div class="eyebrow">BYTE BACK · 12단계</div>
     <h1>내 자료실</h1>
     <p>실습용 계정으로 로그인하세요. 메모에는 가상 자료만 사용합니다.</p>
     <div class="notice">내 가상 메모만 읽고 추가·수정·삭제할 수 있습니다.</div>
@@ -82,10 +88,30 @@
       <p id="note-message" role="status"></p>
       <ul id="notes" aria-live="polite"></ul>
     </section>
+    <section id="operations" class="auth" aria-labelledby="ops-heading">
+      <div class="eyebrow">RECOVERY OPERATIONS</div><h2 id="ops-heading">탈환 작전실</h2>
+      <p>응답에서 확인한 근거만 표시합니다. 공개 점검은 보호 자료를 읽지 않습니다.</p>
+      <p id="ops-status" role="status">검증 정보를 불러오는 중입니다.</p>
+      <div id="ops-summary"></div>
+      <div class="actions"><button id="ops-public" type="button">공개 API 점검</button>
+      <button id="ops-private" type="button" disabled>내 승인 기기로 읽기 점검</button>
+      <button id="ops-export" class="secondary" type="button">가린 결과 내려받기</button></div>
+      <p>승인 기기 점검은 본인 목록 조회·무서명 조회 거부를 확인합니다. 자료를 변경하지 않습니다.</p>
+      <label for="ops-filter">결과 범위</label><select id="ops-filter"><option value="all">전체</option>
+      <option value="live_api">배포 API 실측</option><option value="local_synthetic_api">가상 API 연동</option>
+      <option value="unexecuted">미실행</option></select>
+      <div class="ops-scroll"><table><caption>기대와 실제 결과 · 시각은 UTC</caption><thead><tr>
+      <th>단계 / 요청</th><th>범위</th><th>기대</th><th>실제</th><th>결과</th><th>요청 ID / 확인 시각</th>
+      </tr></thead><tbody id="ops-rows"></tbody></table></div>
+      <p>공식 41종: <strong id="ops-official">개별 결과 미연결 · 통과 수 미확인</strong>
+      화면 문구와 가상 시험은 총공세 통과 증거가 아닙니다.</p>
+      <p>제공 엔진: ALEPH SDP 엔진 · 학생 작업: 판정·탐지 규칙, 자료실, 접속 앱, 복구와 작전실.</p>
+    </section>
     <noscript><p>로그인하려면 브라우저의 JavaScript를 켜 주세요.</p></noscript>
   </main>
   <script src="/vendor/supabase.js" defer></script>
   <script src="/auth.js" defer></script>
   <script src="/pwa.js" defer></script>
+  <script type="module" src="/operations.js"></script>
 </body>
 </html>

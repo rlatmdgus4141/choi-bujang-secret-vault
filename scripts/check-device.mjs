@@ -1,3 +1,5 @@
+import {createRestoreHandler} from '../api/restore.js';
+import {noteContentHash} from '../src/note-integrity.mjs';
 import {generateKeyPair,SignJWT,jwtVerify} from 'jose';
 import {randomUUID,webcrypto} from 'node:crypto';
 import {resolve} from 'node:path';
@@ -9,9 +11,9 @@ import config from '../aleph.config.json' with {type:'json'};
 
 // End-to-end protocol simulation: actual browser WebCrypto client -> actual handlers -> synthetic DB.
 // Keys, tokens, credentials and note contents remain in RAM and never appear in results.
-export async function checkDeviceFlow(){
+export async function checkDeviceFlow({integrated=false}={}){
   const oldFetch=globalThis.fetch;
-  const devices=new Map(),nonces=new Set(),grants=new Set(),notes=new Map(),checks=[];
+  const devices=new Map(),nonces=new Set(),grants=new Set(),notes=new Map(),snapshots=new Map(),checks=[],requests=[];
   const owner=randomUUID(),other=randomUUID(),pair=await generateKeyPair('ES256');
   const bearer=async sub=>new SignJWT({sub,iss:config.identityProvider.issuer,aud:'authenticated',role:'authenticated',
     exp:Math.floor(Date.now()/1000)+300}).setProtectedHeader({alg:'ES256'}).sign(pair.privateKey);
@@ -21,7 +23,7 @@ export async function checkDeviceFlow(){
   const clientFactory=()=>({auth:{async getClaims(token){try{return{data:{claims:(await jwtVerify(token,pair.publicKey)).payload}};}catch{return{error:{}};}}},
     schema(){return this;},from(table){let filters=[],fields,action='read',input;
       const execute=()=>{const data=table==='devices'?devices:notes;let matched=[...data.values()].filter(r=>filters.every(([k,v])=>r[k]===v));
-        if(action==='insert'){const row={...input};data.set(row.id,row);matched=[row];}
+        if(action==='insert'){const row={...input};data.set(row.id,row);if(table==='notes')snapshots.set(row.id,structuredClone(row));matched=[row];}
         if(action==='update')matched=matched.map(r=>{const next={...r,...input};data.set(r.id,next);return next;});
         if(action==='delete')matched.forEach(r=>data.delete(r.id));
         return{data:matched.map(r=>fields==='*'?structuredClone(r):Object.fromEntries(fields.split(',').map(k=>[k,r[k]]))),error:null};};
@@ -30,6 +32,13 @@ export async function checkDeviceFlow(){
         async maybeSingle(){const r=execute();return{...r,data:r.data[0]??null};},async single(){return this.maybeSingle();},
         then(resolve){return Promise.resolve(execute()).then(resolve);}};},
     async rpc(name,p){
+      if(name==='vault_restore_note') {
+        const saved=snapshots.get(p.p_id);
+        if(!saved||saved.owner_id!==p.p_owner)return{error:{code:'P0002'}};
+        if(!p.p_dry_run)notes.set(saved.id,structuredClone(saved));
+        return{data:{id:saved.id,owner_id:saved.owner_id,hash:noteContentHash(saved.title,saved.content),
+          backupVersion:'stage10-v1',restored:!p.p_dry_run}};
+      }
       if(name==='vault_device_register'){
         if(grants.has(p.p_grant_nonce))return{error:{code:'23505'}};grants.add(p.p_grant_nonce);
         devices.set(p.p_id,{id:p.p_id,owner_id:p.p_owner,public_key:p.p_key,approved:false,
@@ -49,16 +58,22 @@ export async function checkDeviceFlow(){
       throw new Error('unexpected_rpc');
     }});
   const auth=createAuthHandler({env,fetchImpl:async()=>Response.json({user:{id:owner},access_token:access})});
+  const restore=createRestoreHandler({env,clientFactory});
   const device=createDeviceHandler({env,clientFactory}),collection=createNotesHandler({env,clientFactory}),item=createNotesHandler({env,clientFactory,itemRoute:true});
   const res=()=>({headers:{},statusCode:0,setHeader(k,v){this.headers[k]=v;},status(c){this.statusCode=c;return this;},json(b){this.body=b;return this;}});
   const transport=async(path,init={})=>{
     const r=res(),url=new URL(path,config.publicAppUrl),h=Object.fromEntries([...new Headers(init.headers)].map(([k,v])=>[k.toLowerCase(),v]));
     const req={method:init.method??'GET',url:url.pathname+url.search,headers:h,query:{},body:init.body===undefined?undefined:JSON.parse(init.body)};
-    const handler=url.pathname==='/api/device'?device:url.pathname==='/api/auth'?auth:url.pathname==='/api/notes'?collection:item;
+    const handler=url.pathname==='/api/device'?device:url.pathname==='/api/auth'?auth:url.pathname==='/api/restore'?restore:url.pathname==='/api/notes'?collection:item;
     if(url.pathname.startsWith('/api/notes/'))req.query.id=url.pathname.slice('/api/notes/'.length);
-    await handler(req,r);return Response.json(r.body,{status:r.statusCode,headers:r.headers});
+    await handler(req,r);
+    if(url.pathname!=='/api/auth') requests.push({stage:'3–11',name:'기기·자료 API 연동',method:req.method,
+      path:url.pathname.startsWith('/api/notes/')?'/api/notes/:id':url.pathname,scope:'local_synthetic_api',
+      expected:null,actual:r.statusCode,requestId:r.headers['X-Vault-Request-Id']??null,
+      checkedAt:r.headers['X-Vault-Checked-At']??null,status:'observed'});
+    return Response.json(r.body,{status:r.statusCode,headers:r.headers});
   };
-  const check=(name,actual,expected)=>{const passed=actual===expected;checks.push({name,actual,expected,passed});if(!passed)throw new Error(`기기 시험 실패: ${name}`);};
+  const check=(name,actual,expected)=>{if(Number.isInteger(expected)&&expected>=100&&requests.length){const row=requests.findLast(r=>r.actual===actual&&r.expected===null);if(row)Object.assign(row,{name,expected,status:actual===expected?'passed':'failed'});}const passed=actual===expected;checks.push({name,actual,expected,passed});if(!passed)throw new Error(`기기 시험 실패: ${name}`);};
   try{
     globalThis.fetch=transport;
     const app=createDeviceClient();await app.prepare();
@@ -93,10 +108,26 @@ export async function checkDeviceFlow(){
       check('replay_denied',replay.status,403);return first;};
     check('fresh_signature_allowed',(await app.signedFetch(session,'/api/notes')).status,200);
     globalThis.fetch=transport;
+    if(integrated){
+      const otherId=randomUUID();notes.set(otherId,{id:otherId,owner_id:other,title:'fixture',content:'fixture'});
+      check('other_owner_denied_after_anonymous_check',(await app.signedFetch(session,`/api/notes/${otherId}`)).status,404);
+      notes.get(id).content='simulated modification';
+      check('signed_restore_after_tampering',(await app.signedFetch(session,'/api/restore',{method:'POST',body:{id}})).status,200);
+      check('restored_content_matches',notes.get(id).content===snapshots.get(id).content,true);
+      check('unsigned_mutation_after_restore',(await transport(`/api/notes/${id}`,{method:'PUT',
+        headers:{Authorization:`Bearer ${access}`},body:JSON.stringify({title:'fixture',body:'should not change'})})).status,403);
+      check('outside_route_after_restore',(await app.signedFetch(session,'/api/notes/export')).status,400);
+      check('normal_read_after_restore',(await app.signedFetch(session,`/api/notes/${id}`)).status,200);
+      check('other_note_preserved',notes.get(otherId).owner_id===other,true);
+    }
+    let savedRequest;
+    if(integrated){globalThis.fetch=async(path,init)=>{savedRequest={path,init};return Response.json({});};
+      await app.signedFetch(session,'/api/notes');globalThis.fetch=transport;}
     check('approved_delete',(await app.signedFetch(session,`/api/notes/${id}`,{method:'DELETE'})).status,200);
     await app.close(session);check('client_cleared_on_logout',app.approved,false);
     check('server_revoked_on_logout',[...devices.values()].every(x=>!x.approved),true);
-    return{schema:'aleph.device.verification.v1',scope:'local_synthetic_only',checks,passed:checks.every(x=>x.passed),
+    if(integrated)check('revoked_device_reconnect_denied',(await transport(savedRequest.path,savedRequest.init)).status,403);
+    return{schema:'aleph.device.verification.v1',scope:'local_synthetic_only',checks,requests,passed:checks.every(x=>x.passed),
       unexecuted:['live_browser_password_login_and_approval','class_engine_mtls_and_signature_attacks']};
   }finally{globalThis.fetch=oldFetch;}
 }
