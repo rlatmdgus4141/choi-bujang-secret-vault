@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#101a28">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <title>BYTE BACK | 내 자료실</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
@@ -33,7 +36,7 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 5단계</div>
+    <div class="eyebrow">BYTE BACK · 11단계</div>
     <h1>내 자료실</h1>
     <p>실습용 계정으로 로그인하세요. 메모에는 가상 자료만 사용합니다.</p>
     <div class="notice">내 가상 메모만 읽고 추가·수정·삭제할 수 있습니다.</div>
@@ -49,6 +52,19 @@
       </form>
       <button id="logout-button" type="button" hidden>로그아웃</button>
       <p id="auth-message" role="alert"></p>
+    </section>
+    <section id="device-panel" class="auth" hidden aria-labelledby="device-heading">
+      <h2 id="device-heading">접속 기기 승인</h2>
+      <p id="device-state" role="status">승인 전: 보호 자료를 표시하지 않습니다.</p>
+      <button id="approve-device" type="button">이 접속의 기기 승인 요청</button>
+      <p>설치 표시는 승인이 아닙니다. 서버가 로그인과 서명을 검증한 뒤 자료실을 엽니다.</p>
+      <p>키와 세션은 저장하지 않습니다. 새로고침하거나 앱을 다시 열면 로그인과 승인을 다시 진행합니다.</p>
+    </section>
+    <section class="auth" aria-labelledby="install-heading">
+      <h2 id="install-heading">내 자료실 앱</h2>
+      <p id="connection-state" role="status">온라인에서 로그인과 기기 승인을 진행하세요.</p>
+      <button id="install-app" type="button" hidden>자료실 앱 설치</button>
+      <p id="install-state">브라우저 메뉴의 앱 설치 또는 홈 화면에 추가를 사용할 수 있습니다. 별도 접속 프로그램은 없습니다.</p>
     </section>
     <section id="notes-section" hidden aria-labelledby="notes-heading">
       <h2 id="notes-heading">내 가상 메모</h2>
@@ -70,5 +86,6 @@
   </main>
   <script src="/vendor/supabase.js" defer></script>
   <script src="/auth.js" defer></script>
+  <script src="/pwa.js" defer></script>
 </body>
 </html>

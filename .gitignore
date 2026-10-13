@@ -13,3 +13,4 @@ recovery/*.log
 recovery/*.lock
 recovery/*.tmp
 public/recovery-verification.json
+public/device-verification.json

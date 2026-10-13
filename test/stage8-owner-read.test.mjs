@@ -46,7 +46,7 @@ async function read(subject, returned, itemRoute) {
     status(code) { this.statusCode = code; return this; },
     json(value) { this.body = value; return this; },
   };
-  await createNotesHandler({ clientFactory, env, itemRoute })({
+  await createNotesHandler({ deviceVerifier: async () => true, clientFactory, env, itemRoute })({
     method: 'GET', url: itemRoute ? `/api/notes/${id}` : '/api/notes',
     query: itemRoute ? { id } : {}, headers: { authorization: await authorization(subject) },
   }, res);

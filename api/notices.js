@@ -1,10 +1,11 @@
+import { verifyDeviceRequest } from '../src/device-access.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { apiResourcePath, RESOURCE_IDS, UUID } from '../src/resources.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
-export function createNoticesHandler({ clientFactory = createClient, env = process.env, itemRoute = false } = {}) {
+export function createNoticesHandler({ clientFactory = createClient, env = process.env, itemRoute = false, deviceVerifier = verifyDeviceRequest } = {}) {
   let runtime;
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -25,6 +26,9 @@ export function createNoticesHandler({ clientFactory = createClient, env = proce
       }
       const identity = await runtime.verifyLogin(req.headers.authorization);
       if (!identity?.userId) return res.status(401).json({ error: 'login_required' });
+      if (config.step >= 11 && !await deviceVerifier(req, identity, runtime.client)) {
+        return res.status(403).json({ error: '서버가 승인한 기기의 서명이 필요합니다.', code: 'device_not_approved' });
+      }
       const methods = itemRoute ? ['GET', 'PUT'] : ['GET', 'POST'];
       if (!methods.includes(req.method)) {
         res.setHeader('Allow', methods.join(', '));

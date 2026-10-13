@@ -1,3 +1,4 @@
+import { verifyDeviceRequest } from '../src/device-access.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { createLoginVerifier } from '../src/verify-login.mjs';
@@ -10,7 +11,7 @@ const READ_FIELDS = 'id,title,content,owner_id';
 const ownsNote = (row, userId) => row && typeof row === 'object'
   && typeof row.owner_id === 'string' && row.owner_id === userId;
 
-export function createNotesHandler({ clientFactory = createClient, env = process.env, itemRoute = false } = {}) {
+export function createNotesHandler({ clientFactory = createClient, env = process.env, itemRoute = false, deviceVerifier = verifyDeviceRequest } = {}) {
   let runtime;
   return async function notes(req, res) {
     res.setHeader('Cache-Control', 'no-store');
@@ -39,6 +40,9 @@ export function createNotesHandler({ clientFactory = createClient, env = process
       const identity = await runtime.verifyLogin(authorization);
       if (!identity?.userId) {
         return res.status(401).json({ error: '유효한 로그인이 필요합니다.' });
+      }
+      if (config.step >= 11 && !await deviceVerifier(req, identity, runtime.client)) {
+        return res.status(403).json({ error: '서버가 승인한 기기의 서명이 필요합니다.', code: 'device_not_approved' });
       }
       const methods = itemRoute ? ['GET', 'PUT', 'DELETE'] : ['GET', 'POST'];
       if (!methods.includes(req.method)) {

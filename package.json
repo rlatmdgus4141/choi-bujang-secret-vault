@@ -27,7 +27,9 @@
     "recovery:policy:preview": "node scripts/recovery-policy.mjs preview",
     "recovery:policy:restore": "node scripts/recovery-policy.mjs restore",
     "test:recovery": "node --test test/stage10-recovery.test.mjs",
-    "recovery:check": "node scripts/check-recovery.mjs"
+    "recovery:check": "node scripts/check-recovery.mjs",
+    "device:check": "node scripts/check-device.mjs",
+    "test:device": "node --test test/stage11-device.test.mjs"
   },
   "engines": {
     "node": ">=22"

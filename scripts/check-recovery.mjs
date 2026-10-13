@@ -66,9 +66,9 @@ async function apiRetest() {
       eq(k,v){filters.push([k,v]);return this;},async order(){return execute();},
       async maybeSingle(){const r=execute();return {...r,data:r.data?.[0]??null};},async single(){return this.maybeSingle();} };
   } });
-  const collection=createNotesHandler({env,clientFactory}), item=createNotesHandler({env,clientFactory,itemRoute:true});
-  const restore=createRestoreHandler({env,clientFactory});
-  const notice=createNoticesHandler({env,clientFactory,itemRoute:true});
+  const collection=createNotesHandler({deviceVerifier:async()=>true,env,clientFactory}), item=createNotesHandler({deviceVerifier:async()=>true,env,clientFactory,itemRoute:true});
+  const restore=createRestoreHandler({deviceVerifier:async()=>true,env,clientFactory});
+  const notice=createNoticesHandler({deviceVerifier:async()=>true,env,clientFactory,itemRoute:true});
   const call=async(method,bearer,body,id)=>{
     const res=response();await(id?item:collection)({method,headers:{authorization:bearer},body,
       url:id?`/api/notes/${id}`:'/api/notes',query:id?{id}:{}},res);return res;

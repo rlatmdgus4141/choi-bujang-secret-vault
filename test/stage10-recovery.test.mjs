@@ -100,7 +100,7 @@ const backupRow = { id: noteId, owner_id: owner, title: '가상 제목 👾', co
 function fixture({ error, foreign = false, hash = noteContentHash(backupRow.title, backupRow.content),
   changedHash = false, changedRow = {}, readError = false } = {}) {
   const calls = [];
-  const handler = createRestoreHandler({ env, clientFactory: () => ({
+  const handler = createRestoreHandler({ deviceVerifier: async () => true, env, clientFactory: () => ({
     auth: { async getClaims(token) {
       try { return { data: { claims: (await jwtVerify(token, pair.publicKey)).payload }, error: null }; }
       catch { return { data: null, error: {} }; }

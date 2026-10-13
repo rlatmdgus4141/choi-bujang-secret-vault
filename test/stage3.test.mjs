@@ -60,7 +60,7 @@ function fixture({ failDb = false, claimPatch } = {}) {
       },
     };
   };
-  return { calls, handler: createNotesHandler({ env, clientFactory }) };
+  return { calls, handler: createNotesHandler({ deviceVerifier: async () => true, env, clientFactory }) };
 }
 const request = (authorization, method = 'GET') => ({ method, headers: { authorization },
   body: { userId, role: 'authenticated' }, query: { userId, role: 'authenticated' } });
@@ -174,6 +174,10 @@ test('authenticated stages self-check records actual rejection requests without 
   try {
     globalThis.fetch = async (url, options) => {
       calls.push({ path: new URL(url).pathname, search: new URL(url).search, options });
+      if (new URL(url).pathname === '/manifest.webmanifest') return Response.json({start_url:'/',scope:'/',display:'standalone',icons:[{src:'/icons/icon-192.png'},{src:'/icons/icon-512.png'}]});
+      if (new URL(url).pathname.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]));
+      if (new URL(url).pathname === '/sw.js') return new Response("url.pathname.startsWith('/api/') /offline.html");
+      if (new URL(url).pathname === '/offline.html') return new Response('offline guide');
       if (new URL(url).pathname === '/rest/v1/notes') return Response.json({ code: '42501' }, { status: 401 });
       if (new URL(url).pathname === '/') return new Response('<script src="/auth.js"></script>', {
         headers: { 'X-Content-Type-Options': 'nosniff' } });
@@ -182,7 +186,7 @@ test('authenticated stages self-check records actual rejection requests without 
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, config.step >= 10 ? 14 : 13);
+    assert.equal(calls.length, config.step >= 11 ? 19 : config.step >= 10 ? 14 : 13);
     if (config.step >= 10) assert.equal(calls.find(call => call.path === config.restoreRoute).options.method, 'POST');
     assert.equal(calls.find(call => call.path === '/api/notes' && call.options.method === 'POST').options.method, 'POST');
     assert.ok(checks.slice(1, 9).every(check => check.observed.includes('HTTP 401')));
@@ -195,8 +199,8 @@ test('authenticated stages self-check records actual rejection requests without 
     globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
     const failed = await runAttackChecks(config);
     assert.ok(failed.filter(check => !check.attackId.startsWith('local_')
-      && !['backup_verified', 'post_restore_retest', 'single_note_restore_matches', 'restore_preserves_other_records'].includes(check.attackId)).every(check => check.observed.includes('확인 실패')));
-    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, config.step >= 10 ? 3 : 7);
+      && !['backup_verified', 'post_restore_retest', 'single_note_restore_matches', 'restore_preserves_other_records', 'app_approval_and_request_signatures', 'installable_public_offline_shell'].includes(check.attackId)).every(check => check.observed.includes('확인 실패')));
+    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, config.step >= 11 ? 1 : config.step >= 10 ? 3 : 7);
     assert.ok(failed.filter(check => check.attackId.startsWith('local_')).every(check => check.observed.includes('로컬 가상 사건:')));
   } finally { globalThis.fetch = original; }
 });
@@ -242,8 +246,8 @@ function crudFixture({ notices = false, authority = {} } = {}) {
     },
   });
   const factory = notices ? createNoticesHandler : createNotesHandler;
-  const root = factory({ env, clientFactory });
-  const item = factory({ env, clientFactory, itemRoute: true });
+  const root = factory({ deviceVerifier: async () => true, env, clientFactory });
+  const item = factory({ deviceVerifier: async () => true, env, clientFactory, itemRoute: true });
   return { rows, async call(method, bearer, body, id, extras = {}) {
     const res = response();
     await (id === undefined ? root : item)({ method, url: extras.url, headers: { authorization: bearer, ...extras.headers }, body,

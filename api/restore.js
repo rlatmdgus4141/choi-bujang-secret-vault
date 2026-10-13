@@ -1,10 +1,11 @@
+import { verifyDeviceRequest } from '../src/device-access.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { UUID } from '../src/resources.mjs';
 import { noteContentHash } from '../src/note-integrity.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
-export function createRestoreHandler({ clientFactory = createClient, env = process.env } = {}) {
+export function createRestoreHandler({ clientFactory = createClient, env = process.env, deviceVerifier = verifyDeviceRequest } = {}) {
   let runtime;
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -25,6 +26,9 @@ export function createRestoreHandler({ clientFactory = createClient, env = proce
       }
       const identity = await runtime.verify(req.headers.authorization);
       if (!identity?.userId) return res.status(401).json({ error: '유효한 로그인이 필요합니다.' });
+      if (config.step >= 11 && !await deviceVerifier(req, identity, runtime.client)) {
+        return res.status(403).json({ error: '서버가 승인한 기기의 서명이 필요합니다.', code: 'device_not_approved' });
+      }
       if (req.method !== 'POST') {
         res.setHeader('Allow', 'POST');
         return res.status(405).json({ error: '허용되지 않은 요청입니다.' });
