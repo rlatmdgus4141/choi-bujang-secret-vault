@@ -2,6 +2,16 @@
 // Do not expose this as an API accepting browser-supplied deviceRegistered or subjectId.
 export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required', 'resource_zones']);
 
+// Explicit access grant for the documented synthetic resource in scripts/fixture-7.mjs.
+// These public practice identifiers are NOT real users or inferred production ownership.
+// No grant is learned from incoming requests; changing any scope component must deny demo access.
+const PRACTICE_READ_GRANT = Object.freeze({
+  classId: 'class_fixture', projectId: 'project_fixture', subjectId: 'learner_fixture',
+  deviceId: 'aaaaaaaaaaaaaaaa', service: 'notes', method: 'GET',
+  path: '/notes/demo', route: 'GET /notes/:id',
+});
+
+
 // Only engine-delivered fields are inspected. Missing values stay missing; headers are never read.
 function connectionContext(request) {
   const signals = request.signals;
@@ -54,8 +64,8 @@ export async function decide(request) {
       const id = typeof request.path === 'string' && request.path.startsWith(`${base}/`)
         ? request.path.slice(base.length + 1) : '';
       const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id);
-      const practiceRead = resource === 'notes' && base === '/notes'
-        && id === 'demo' && request.method === 'GET';
+      const practiceRead = request.signals?.source === 'judge_fixture'
+        && Object.entries(PRACTICE_READ_GRANT).every(([key, value]) => request[key] === value);
       const item = (uuid || practiceRead) && request.route === `${request.method} ${base}/:id`;
       // No teacher/ownership assertion exists in this contract. Notices mutations fail closed here.
       // A notes allow is only the route gate: the final API must atomically constrain owner_id.

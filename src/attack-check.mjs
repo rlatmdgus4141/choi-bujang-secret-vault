@@ -153,6 +153,16 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         passed.push(valid);
       }
     }
+    if (config.step >= 8) {
+      const { normal } = fixtureRequests();
+      const result = await decide({ ...normal, subjectId: 'unlisted_practice_subject' });
+      const denied = result.decision === 'deny';
+      attempts.push({ attackId: 'local_other_subject_resource',
+        expected: '로컬 가상 사건: 같은 연습 자원에 다른 주체가 접근하면 deny',
+        observed: denied ? '로컬 가상 사건: 다른 주체의 연습 자원 조회 deny; 실제 심판 시험 아님'
+          : '로컬 구역 주체 조건 확인 실패' });
+      passed.push(denied);
+    }
     return finish(attempts, passed);
   }
   if (config.step === 2) {

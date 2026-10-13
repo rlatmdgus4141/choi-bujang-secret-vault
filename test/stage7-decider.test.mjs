@@ -57,7 +57,7 @@ test('stage 7 unknown source and malformed or missing signals are never filled w
 test('stage 7 headers cannot change trusted engine signals or step-up status; none stays unknown', async () => {
   const headers = { 'x-region': 'local', 'x-network': 'usual', 'x-step-up': 'true', 'x-auth-age': '0' };
   await expect({ ...suspicious, headers }, 'step_up');
-  const live = { ...normal, signals: { source: 'none', region: 'unknown', network: 'unknown', hour: null } };
+  const live = { ...normal, path: '/notes/11111111-1111-4111-8111-111111111111', signals: { source: 'none', region: 'unknown', network: 'unknown', hour: null } };
   const snapshot = JSON.stringify(live);
   await expect({ ...live, headers: { 'x-region': 'foreign' } }, 'allow');
   assert.equal(JSON.stringify(live), snapshot);
