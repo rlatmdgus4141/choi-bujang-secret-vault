@@ -3,6 +3,12 @@ import { fileURLToPath } from 'node:url';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
+  // Keep request metadata and the wire header equal to the reported attempt ID.
+  // This identifies a check; it never grants authentication or device approval.
+  const request = (attackId, url, init = {}) => fetch(url, {
+    ...init, attackId,
+    headers: { ...init.headers, 'x-aleph-attack-id': attackId },
+  });
   // 성공 여부는 응답에서 판정한 boolean으로만 결정합니다. 제출용 문구는 판정에 쓰지 않습니다.
   const finish = (attempts, passed) => {
     if (requirePass) {
@@ -23,7 +29,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
   }
   if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
-  const response = await fetch(new URL('/data.json', app), {
+  const response = await request(config.step >= 2 ? 'static_note_seed_read' : 'anonymous_note_read', new URL('/data.json', app), {
     redirect: 'error', signal: AbortSignal.timeout(10000),
   });
   if (config.step >= 3) {
@@ -55,7 +61,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         passed.push(null);
         continue;
       }
-      const api = await fetch(new URL(check.path ?? '/api/notes', app), {
+      const api = await request(check.attackId, new URL(check.path ?? '/api/notes', app), {
         method: check.method, headers: check.headers, redirect: 'error',
         signal: AbortSignal.timeout(15000),
       });
@@ -89,7 +95,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         const url = new URL(config.originalApiUrl);
         // id는 NOT NULL인 기본키입니다. PATCH 조건은 어떤 기존 행에도 일치하지 않습니다.
         url.search = method === 'GET' ? 'select=id&limit=1' : 'id=is.null';
-        const direct = await fetch(url, { method, redirect: 'error',
+        const direct = await request(method === 'GET' ? 'anon_original_read' : 'anon_original_update', url, { method, redirect: 'error',
           headers: { apikey: publicKey, ...(method === 'PATCH' ? { 'Content-Type': 'application/json' } : {}) },
           ...(method === 'PATCH' ? { body: JSON.stringify({ title: 'permission-check' }) } : {}),
           signal: AbortSignal.timeout(15000),
@@ -105,21 +111,22 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
             : `원본 권한 거부 확인 실패 (HTTP ${direct.status})` });
         passed.push(denied);
       }
-      const home = await fetch(new URL('/', app), { redirect: 'error', signal: AbortSignal.timeout(15000) });
-      const html = await home.text();
+      const home = await request('home_security_header', new URL('/', app), { redirect: 'error', signal: AbortSignal.timeout(15000) });
       const protectedHome = home.ok && home.headers.get('x-content-type-options') === 'nosniff';
       attempts.push({ attackId: 'home_security_header', expected: '첫 화면 응답에 nosniff 보안 헤더가 있음',
         observed: protectedHome ? 'HTTP 200, X-Content-Type-Options: nosniff 확인'
           : `첫 화면 보안 헤더 확인 실패 (HTTP ${home.status})` });
       passed.push(protectedHome);
+      const browserHome = await request('browser_public_key_absent', new URL('/', app), { redirect: 'error', signal: AbortSignal.timeout(15000) });
+      const html = await browserHome.text();
       const paths = new Set();
       for (const match of html.matchAll(/src=["']([^"']+\.(?:js|mjs)(?:\?[^"']*)?)["']/gu)) {
         const url = new URL(match[1], app);
         if (url.origin === app.origin) paths.add(url.href);
       }
-      let noClientKey = home.ok && paths.size > 0 && !html.includes(publicKey);
+      let noClientKey = browserHome.ok && paths.size > 0 && !html.includes(publicKey);
       for (const path of paths) {
-        const script = await fetch(path, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+        const script = await request('browser_public_key_absent', path, { redirect: 'error', signal: AbortSignal.timeout(15000) });
         const text = await script.text();
         noClientKey &&= script.ok && !text.includes(publicKey)
           && !/\bsb_publishable_[A-Za-z0-9_-]{8,}|\beyJ[A-Za-z0-9_-]{12,}\.eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/u.test(text);
@@ -146,7 +153,8 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       passed.push(null);
     }
     if (config.step >= 11) {
-      const manifest = await fetch(new URL('/manifest.webmanifest',app), {redirect:'error',signal:AbortSignal.timeout(15000)});
+      const appAttackId = config.step >= 12 ? 'operations_evidence_and_installable_app' : 'installable_public_offline_shell';
+      const manifest = await request(appAttackId, new URL('/manifest.webmanifest',app), {redirect:'error',signal:AbortSignal.timeout(15000)});
       let installable = false;
       const installChecks = { manifest: false, icons: false, worker: false, offline: false };
       try {
@@ -159,16 +167,16 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           const url = new URL(icon.src,app);
           if(url.origin !== app.origin){iconsValid=false;break;}
           // HEAD verifies the public icon without the sandbox's optional binary-body API.
-          const response = await fetch(url,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(15000)});
+          const response = await request(appAttackId, url,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(15000)});
           const mediaType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
           iconsValid &&= response.status === 200 && mediaType === 'image/png';
         }
         installChecks.icons = iconsValid;
         installable &&= iconsValid;
       } catch { installable = false; }
-      const worker = await fetch(new URL('/sw.js',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
+      const worker = await request(appAttackId, new URL('/sw.js',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
       const source = await worker.text();
-      const offline = await fetch(new URL('/offline.html',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
+      const offline = await request(appAttackId, new URL('/offline.html',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
       installChecks.worker = worker.ok && source.includes("url.pathname.startsWith('/api/')")
         && source.includes('/offline.html') && !source.includes('cache.put');
       installChecks.offline = offline.ok;
@@ -179,9 +187,9 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           :'설치형 앱 공개 파일 확인 실패'});
       passed.push(installable);
       if(config.step>=12){
-        const response=await fetch(new URL('/api/operations',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+        const response=await request(appAttackId, new URL('/api/operations',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
         const metadata=await response.json();
-        const evidence=await fetch(new URL('/operations-verification.json',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+        const evidence=await request(appAttackId, new URL('/operations-verification.json',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
         const report=await evidence.json();
         const operationsChecks = {
           api_status: response.status === 200,
@@ -213,7 +221,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       empty = response.ok && Array.isArray(data?.notes) && data.notes.length === 0
         && !JSON.stringify(data).includes(config.sampleMarker);
     } catch { /* JSON 형식 오류는 성공으로 기록하지 않습니다. */ }
-    const api = await fetch(new URL('/api/notes', app), {
+    const api = await request('anonymous_server_api_read', new URL('/api/notes', app), {
       redirect: 'error', signal: AbortSignal.timeout(15000),
     });
     let noteCount = 0;

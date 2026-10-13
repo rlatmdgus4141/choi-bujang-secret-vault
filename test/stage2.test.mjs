@@ -26,7 +26,9 @@ test('bundle checks distinguish empty static data from the remaining public API 
     const attempts = await runAttackChecks({ step: 2, sampleMarker: 'SAMPLE_NOTE_1',
       publicAppUrl: 'https://fixture.vercel.app' });
     assert.deepEqual(calls.map(call => call.path), ['/data.json', '/api/notes']);
-    assert.ok(calls.every(call => !call.options.headers && call.options.redirect === 'error'));
+    assert.ok(calls.every(call => !call.options.headers.Authorization && call.options.redirect === 'error'));
+    assert.deepEqual(calls.map(call => call.options.attackId), attempts.map(item => item.attackId));
+    assert.ok(calls.every(call => call.options.headers['x-aleph-attack-id'] === call.options.attackId));
     assert.match(attempts[0].observed, /메모 0건/u);
     assert.match(attempts[0].observed, /확인 표시 없음/u);
     assert.match(attempts[1].observed, /인증은 다음 단계/u);

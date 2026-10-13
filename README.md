@@ -1,5 +1,15 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 12단계 보완 저장점 · 실제 요청과 attackId 연결
+
+심판이 읽은 05d2a9a0a2de에서 실행 결과 9개의 attackId가 실제 요청에 전달되지 않았습니다.
+자기 점검의 모든 실제 GET/HEAD 요청에 결과표와 같은 attackId 옵션과 x-aleph-attack-id 헤더를 붙입니다.
+첫 화면 보안 헤더와 브라우저 코드 점검은 각각 해당 ID로 요청하며, 작전실·설치 파일의 묶음 점검은 최종 결과 ID를 사용합니다.
+이 식별자는 인증이나 승인 권한이 아닙니다. HTTP 응답에 대한 기존 판정과 not_run 11개를 유지합니다.
+회귀 시험은 실행 결과의 ID 집합과 실제 요청의 ID 집합이 같고 미실행 ID로 요청하지 않는지 확인합니다.
+공개 시작 틀에 식별자 전달 규약은 명시되어 있지 않아, 운영 심판의 인식 여부는 재제출로 확인해야 합니다.
+재현: `node --test test/stage5-checks.test.mjs test/stage3.test.mjs` → 검사한 main 커밋 운영 배포 → `npm run bundle`.
+
 ## 12단계 보완 저장점 · 바이너리 응답 없는 아이콘 점검
 
 심판의 `operations_evidence_and_installable_app` 실패를 바이너리 arrayBuffer가 없는 응답으로 재현했습니다.

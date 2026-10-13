@@ -38,6 +38,7 @@ function passingResponse(url) {
 
 test('strict self-checks preserve the submission schema when all actual responses pass', async () => {
   const previous = globalThis.fetch;
+  const requests = [];
   const originalRead = fs.readFileSync;
   fs.readFileSync = (path, ...args) => {
     if (typeof path !== 'string') throw new Error('path_format');
@@ -49,6 +50,9 @@ test('strict self-checks preserve the submission schema when all actual response
       assert.ok(['GET', 'HEAD'].includes(init.method ?? 'GET'));
       assert.equal(new URL(url).protocol, 'https:');
       assert.equal(init.redirect, 'error');
+      assert.match(init.attackId, /^[a-z0-9][a-z0-9_.-]{0,79}$/u);
+      assert.equal(init.headers['x-aleph-attack-id'], init.attackId);
+      requests.push({ attackId: init.attackId, path: new URL(url).pathname });
       const response = passingResponse(url);
       // The judge exposes get(), but not the complete browser Headers API.
       return { status: response.status, ok: response.ok,
@@ -58,6 +62,13 @@ test('strict self-checks preserve the submission schema when all actual response
     const attempts = await runAttackChecks(config, { requirePass: true });
     assert.equal(attempts.length, 20);
     assert.equal(attempts.filter(item => item.observed === 'not_run').length, 11);
+    const executedIds = attempts.filter(item => item.observed !== 'not_run').map(item => item.attackId).sort();
+    assert.deepEqual([...new Set(requests.map(item => item.attackId))].sort(), executedIds);
+    for (const item of attempts.filter(item => item.observed === 'not_run')) {
+      assert.ok(!requests.some(request => request.attackId === item.attackId));
+    }
+    assert.ok(requests.some(item => item.attackId === 'browser_public_key_absent' && item.path === '/'));
+    assert.ok(requests.some(item => item.attackId === 'operations_evidence_and_installable_app' && item.path === '/api/operations'));
     const local = attempts.filter(attempt => attempt.attackId.startsWith('local_'));
     assert.equal(local.length, config.step >= 11 ? 1 : 3);
     assert.ok(attempts.some(x => x.attackId === 'single_note_restore_matches'));
@@ -92,7 +103,7 @@ test('strict self-checks reject leaked static data, permitted app access and dir
     { id: 'static_note_seed_read', match: (url) => url.pathname === '/data.json',
       response: () => Response.json({ notes: [{}] }) },
     { id: 'anonymous_note_read', match: (url, init) => url.pathname === '/api/notes'
-        && init.method === 'GET' && !init.headers,
+        && init.method === 'GET' && !init.headers.Authorization,
       response: () => Response.json([]) },
     { id: 'anon_original_read', match: (url, init) => url.pathname === '/rest/v1/notes'
         && init.method === 'GET',
