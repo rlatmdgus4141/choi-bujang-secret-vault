@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { decide } from './decider.mjs';
+import { fixtureRequests } from '../scripts/fixture-7.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
@@ -10,7 +12,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -111,6 +113,24 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         observed: noClientKey ? '첫 화면·화면 스크립트에서 Supabase 공개 키 없음 확인'
           : '화면 코드의 공개 키 제거 확인 실패' });
       passed.push(noClientKey);
+    }
+    if (config.step === 6) {
+      const { normal } = fixtureRequests();
+      for (const check of [
+        { attackId: 'local_registered_device_read', flag: true, decision: 'allow', reason: 'approved' },
+        { attackId: 'local_unregistered_device_read', flag: false, decision: 'deny', reason: 'device_not_registered' },
+        { attackId: 'local_missing_device_registration', flag: undefined, decision: 'deny', reason: 'device_not_registered' },
+      ]) {
+        const request = { ...normal, deviceRegistered: check.flag };
+        if (check.flag === undefined) delete request.deviceRegistered;
+        const result = await decide(request);
+        const valid = result.decision === check.decision && result.reasonCode === check.reason;
+        attempts.push({ attackId: check.attackId,
+          expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
+          observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 mTLS·심판 시험 아님`
+            : '로컬 기기 조건 확인 실패' });
+        passed.push(valid);
+      }
     }
     return finish(attempts, passed);
   }

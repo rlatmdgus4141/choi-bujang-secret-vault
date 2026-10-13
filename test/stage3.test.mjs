@@ -159,7 +159,7 @@ test('current deployment identity and unchanged starter verifier', async () => {
   const identity = deploymentIdentity({ VERCEL_GIT_PROVIDER: 'github',
     VERCEL_GIT_REPO_OWNER: 'fixture', VERCEL_GIT_REPO_SLUG: 'vault',
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), VERCEL_URL: 'fixture.vercel.app' }, config);
-  assert.equal(identity.step, 5);
+  assert.equal(identity.step, 6);
   assert.equal(identity.originalApiUrl, config.originalApiUrl);
   assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
   const source = await readFile(new URL('../src/verify-login.mjs', import.meta.url));
@@ -192,7 +192,9 @@ test('authenticated stages self-check records actual rejection requests without 
     assert.equal(calls[8].search, '?id=is.null');
     globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
     const failed = await runAttackChecks(config);
-    assert.ok(failed.every(check => check.observed.includes('확인 실패')));
+    assert.ok(failed.filter(check => !check.attackId.startsWith('local_')).every(check => check.observed.includes('확인 실패')));
+    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, 3);
+    assert.ok(failed.filter(check => check.attackId.startsWith('local_')).every(check => check.observed.includes('로컬 가상 사건:')));
   } finally { globalThis.fetch = original; }
 });
 
