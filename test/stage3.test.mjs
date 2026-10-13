@@ -175,7 +175,7 @@ test('authenticated stages self-check records actual rejection requests without 
     globalThis.fetch = async (url, options) => {
       calls.push({ path: new URL(url).pathname, search: new URL(url).search, options });
       if (new URL(url).pathname === '/manifest.webmanifest') return Response.json({start_url:'/',scope:'/',display:'standalone',icons:[{src:'/icons/icon-192.png'},{src:'/icons/icon-512.png'}]});
-      if (new URL(url).pathname.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]));
+      if (new URL(url).pathname.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]), {headers:{'content-type':'image/png'}});
       if (new URL(url).pathname === '/sw.js') return new Response("url.pathname.startsWith('/api/') /offline.html");
       if (new URL(url).pathname === '/offline.html') return new Response('offline guide');
       if (new URL(url).pathname === '/rest/v1/notes') return Response.json({ code: '42501' }, { status: 401 });

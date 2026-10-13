@@ -25,7 +25,7 @@ function passingResponse(url) {
     officialAttacks:{verified:0,status:'unexecuted'}},{headers:{'x-vault-request-id':'11111111-1111-4111-8111-111111111111','x-vault-checked-at':new Date().toISOString()}});
   if(path==='/operations-verification.json')return Response.json({commit,passed:true});
   if (path === '/manifest.webmanifest') return Response.json({start_url:'/',scope:'/',display:'standalone',icons:[{src:'/icons/icon-192.png'},{src:'/icons/icon-512.png'}]});
-  if (path.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]));
+  if (path.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]), {headers:{'content-type':'image/png'}});
   if (path === '/sw.js') return new Response("url.pathname.startsWith('/api/') /offline.html");
   if (path === '/offline.html') return new Response('offline guide');
   if (path === '/data.json') return Response.json({ notes: [] });
@@ -53,8 +53,7 @@ test('strict self-checks preserve the submission schema when all actual response
       // The judge exposes get(), but not the complete browser Headers API.
       return { status: response.status, ok: response.ok,
         headers: { get: name => response.headers.get(name) },
-        json: () => response.json(), text: () => response.text(),
-        arrayBuffer: () => response.arrayBuffer() };
+        json: () => response.json(), text: () => response.text() };
     };
     const attempts = await runAttackChecks(config, { requirePass: true });
     assert.equal(attempts.length, 20);
@@ -79,6 +78,8 @@ test('strict self-checks preserve the submission schema when all actual response
 test('strict self-checks reject leaked static data, permitted app access and direct API regressions', async () => {
   const previous = globalThis.fetch;
   const regressions = [
+    { id: 'operations_evidence_and_installable_app', match: url => url.pathname.startsWith('/icons/'),
+      response: () => new Response('not an image', {headers:{'content-type':'text/html'}}) },
     ...['x-vault-request-id', 'x-vault-checked-at'].map(header => ({
       id: 'operations_evidence_and_installable_app',
       match: url => url.pathname === '/api/operations',

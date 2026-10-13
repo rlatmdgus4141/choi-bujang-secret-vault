@@ -1,5 +1,13 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 12단계 보완 저장점 · 바이너리 응답 없는 아이콘 점검
+
+심판의 `operations_evidence_and_installable_app` 실패를 바이너리 arrayBuffer가 없는 응답으로 재현했습니다.
+아이콘은 공개 HEAD 응답의 200·image/png를 확인하며 바이너리 본문은 미검사로 명시합니다.
+작전실 API의 요청 ID·확인 시각과 배포 보고서 커밋 비교는 유지합니다.
+실패 시 설치/작전실의 어긋난 조건 이름을 출력하며 값을 만들어 채우지 않습니다.
+재현: `node --test test/stage5-checks.test.mjs test/stage3.test.mjs` → `npm test` → 검사한 main 커밋 운영 배포 → `npm run bundle`.
+
 ## 12단계 보완 저장점 · 응답 헤더 호환
 
 심판의 첫 오류 `response.headers.has is not a function`을 get만 제공하는 응답으로 재현했습니다.

@@ -7,7 +7,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
   const finish = (attempts, passed) => {
     if (requirePass) {
       const failed = attempts.filter((_, index) => passed[index] !== true && attempts[index].observed !== 'not_run');
-      if (failed.length) throw new Error(`실제 배포 자기 점검 실패: ${failed.map(item => item.attackId).join(', ')}`);
+      if (failed.length) throw new Error(`실제 배포 자기 점검 실패: ${failed.map(item => item.attackId === 'operations_evidence_and_installable_app' ? `${item.attackId} (${item.observed})` : item.attackId).join(', ')}`);
     }
     return attempts;
   };
@@ -148,26 +148,34 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     if (config.step >= 11) {
       const manifest = await fetch(new URL('/manifest.webmanifest',app), {redirect:'error',signal:AbortSignal.timeout(15000)});
       let installable = false;
+      const installChecks = { manifest: false, icons: false, worker: false, offline: false };
       try {
         const data = await manifest.json();
         installable = manifest.ok && data.start_url === '/' && data.scope === '/'
           && data.display === 'standalone' && data.icons?.length === 2;
+        installChecks.manifest = installable;
+        let iconsValid = Array.isArray(data.icons) && data.icons.length === 2;
         for (const icon of data.icons ?? []) {
           const url = new URL(icon.src,app);
-          if(url.origin !== app.origin){installable=false;break;}
-          const response = await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          installable &&= response.ok && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
+          if(url.origin !== app.origin){iconsValid=false;break;}
+          // HEAD verifies the public icon without the sandbox's optional binary-body API.
+          const response = await fetch(url,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(15000)});
+          const mediaType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+          iconsValid &&= response.status === 200 && mediaType === 'image/png';
         }
+        installChecks.icons = iconsValid;
+        installable &&= iconsValid;
       } catch { installable = false; }
       const worker = await fetch(new URL('/sw.js',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
       const source = await worker.text();
       const offline = await fetch(new URL('/offline.html',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
-      installable &&= worker.ok && source.includes("url.pathname.startsWith('/api/')")
-        && source.includes('/offline.html') && !source.includes('cache.put') && offline.ok;
+      installChecks.worker = worker.ok && source.includes("url.pathname.startsWith('/api/')")
+        && source.includes('/offline.html') && !source.includes('cache.put');
+      installChecks.offline = offline.ok;
+      installable &&= installChecks.worker && installChecks.offline;
       attempts.push({attackId:'installable_public_offline_shell',
         expected:'manifest·아이콘·오프라인 안내가 열리고 보호 API는 캐시하지 않음',
-        observed:installable?'실제 배포의 manifest·PNG 아이콘 2개·오프라인 안내·API 캐시 제외 확인'
+        observed:installable?'실제 manifest·아이콘 2개 HEAD 200/image/png·오프라인 안내·API 캐시 제외 확인; 바이너리 본문 미검사'
           :'설치형 앱 공개 파일 확인 실패'});
       passed.push(installable);
       if(config.step>=12){
@@ -175,15 +183,24 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         const metadata=await response.json();
         const evidence=await fetch(new URL('/operations-verification.json',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
         const report=await evidence.json();
-        const valid=response.status===200&&Boolean(response.headers.get('x-vault-request-id'))
-          &&Number.isFinite(Date.parse(response.headers.get('x-vault-checked-at')))
-          &&metadata.step===12&&metadata.engine?.name==='ALEPH SDP 엔진'
-          &&metadata.officialAttacks?.verified===0&&metadata.officialAttacks?.status==='unexecuted'
-          &&evidence.ok&&report.commit===metadata.commit&&report.passed===true;
+        const operationsChecks = {
+          api_status: response.status === 200,
+          request_id: Boolean(response.headers.get('x-vault-request-id')),
+          checked_at: Number.isFinite(Date.parse(response.headers.get('x-vault-checked-at'))),
+          metadata_step: metadata.step === 12,
+          engine_source: metadata.engine?.name === 'ALEPH SDP 엔진',
+          official_unexecuted: metadata.officialAttacks?.verified === 0 && metadata.officialAttacks?.status === 'unexecuted',
+          report_status: evidence.ok,
+          report_commit: report.commit === metadata.commit,
+          report_result: report.passed === true,
+        };
+        const valid = Object.values(operationsChecks).every(Boolean);
+        const failures = [...Object.entries(installChecks), ...Object.entries(operationsChecks)]
+          .filter(([, passed]) => !passed).map(([name]) => name);
         attempts[attempts.length-1]={attackId:'operations_evidence_and_installable_app',
           expected:'설치형 앱 유지, 작전실 API·서버 요청 근거·가상 통합 시험·공식 41종 미실행 구분',
-          observed:valid&&installable?'실제 작전실 API HTTP 200와 서버 요청 ID/시각, 설치 파일 확인; 배포 가상 시험 보고서 조회(현재 명령에서 재실행 아님); 공식 41종 미확인'
-            :'작전실 또는 설치형 앱 근거 확인 실패'};
+          observed:valid&&installable?'실제 작전실 API HTTP 200와 요청 ID/시각, 설치 파일 및 아이콘 HEAD 200/image/png 확인; 바이너리 본문 미검사; 배포 가상 보고서 조회(재실행 아님); 공식 41종 미확인'
+            :`작전실/설치 근거 확인 실패: ${failures.join(', ')}`};
         passed[passed.length-1]=valid&&installable;
       }
     }
