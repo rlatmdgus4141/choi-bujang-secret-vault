@@ -2,9 +2,9 @@ artifacts/
 bundle-notes.json
 .env
 .env.*
+!.env.example
 node_modules/
 public/aleph.json
-
-# XDR local audit and temporary deny rules
 xdr/alerts.log
 xdr/runtime/
+public/vendor/

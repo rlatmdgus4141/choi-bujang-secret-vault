@@ -1,11 +1,52 @@
 {
-  "step": 1,
-  "repoUrl": "https://replace-with-your-github-repo.example",
-  "publicAppUrl": "https://replace-with-your-vercel-app.example",
+  "step": 8,
+  "repoUrl": "https://github.com/rlatmdgus4141/choi-bujang-secret-vault",
+  "publicAppUrl": "https://choi-bujang-secret-vault-rosy.vercel.app",
   "sampleMarker": "SAMPLE_NOTE_1",
   "judgeIssuer": "https://aleph-judge-production.up.railway.app/defense/judge",
-  "identityProvider": null,
-  "allowedRoutes": [],
-  "originalApiUrl": null,
+  "identityProvider": {
+    "issuer": "https://nsqtwulghnijprefvfud.supabase.co/auth/v1",
+    "audience": "authenticated",
+    "jwksUrl": "https://nsqtwulghnijprefvfud.supabase.co/auth/v1/.well-known/jwks.json"
+  },
+  "allowedRoutes": [
+    {
+      "method": "GET",
+      "path": "/api/notes"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notes"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notes/:id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notes/:id"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/notes/:id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notices"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notices"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notices/:id"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notices/:id"
+    }
+  ],
+  "originalApiUrl": "https://nsqtwulghnijprefvfud.supabase.co/rest/v1/notes",
   "restoreRoute": null
 }

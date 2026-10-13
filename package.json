@@ -15,7 +15,10 @@
     "xdr:respond": "node scripts/xdr-replay.mjs",
     "test:xdr": "node --test test/xdr-brute-force.test.mjs test/xdr-web-injection.test.mjs test/xdr-run.test.mjs",
     "xdr:web:read": "node xdr/web-injection/read-alerts.mjs",
-    "xdr:web:respond": "node scripts/xdr-web-replay.mjs"
+    "xdr:web:respond": "node scripts/xdr-web-replay.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:stage2": "node --test test/stage2.test.mjs",
+    "check:stage2": "node scripts/check-stage2.mjs"
   },
   "engines": {
     "node": ">=22"

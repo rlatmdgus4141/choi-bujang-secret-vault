@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { verifyDeployment } from './verify-deployment.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const git = (...args) => execFileSync('git', ['-C', root, ...args], {
@@ -71,7 +72,9 @@ try {
   const checkerUrl = pathToFileURL(join(root, 'src', 'attack-check.mjs'));
   const { runAttackChecks } = await import(checkerUrl.href);
   if (typeof runAttackChecks !== 'function') fail('src/attack-check.mjs가 runAttackChecks를 내보내야 합니다.');
-  const attackAttempts = await runAttackChecks(config);
+  // 다른 커밋·경로 설정의 배포나 실패한 실제 점검으로 새 제출 묶음을 만들지 않습니다.
+  await verifyDeployment(config, commit);
+  const attackAttempts = await runAttackChecks(config, { requirePass: true });
   if (!Array.isArray(attackAttempts) || !attackAttempts.length || attackAttempts.length > 20) {
     fail('직접 실행한 공격 점검 결과 1~20개가 필요합니다.');
   }
