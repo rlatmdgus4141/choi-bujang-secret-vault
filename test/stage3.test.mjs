@@ -46,7 +46,7 @@ function fixture({ failDb = false, claimPatch } = {}) {
         calls.reads++;
         assert.equal(table, 'notes');
         return { select(fields) {
-          assert.equal(fields, 'id,title,content');
+          assert.equal(fields, 'id,title,content,owner_id');
           return { eq(column, value) {
             assert.equal(column, 'owner_id');
             assert.equal(value, userId);
@@ -54,7 +54,7 @@ function fixture({ failDb = false, claimPatch } = {}) {
           }, async order(column) {
             assert.equal(column, 'position');
             return failDb ? { data: null, error: new Error(key) }
-              : { data: [{ id: userId, title: 'fixture', content: 'test-only', extra: key }], error: null };
+              : { data: [{ id: userId, title: 'fixture', content: 'test-only', owner_id: userId, extra: key }], error: null };
           } };
         } };
       },

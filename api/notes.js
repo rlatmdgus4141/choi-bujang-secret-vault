@@ -6,6 +6,9 @@ import config from '../aleph.config.json' with { type: 'json' };
 
 // 기존 로그인 검증 도우미를 그대로 사용하고 모든 자료 요청에 소유자 조건을 적용합니다.
 const publicNote = ({ id, title, content }) => ({ id, title, body: content });
+const READ_FIELDS = 'id,title,content,owner_id';
+const ownsNote = (row, userId) => row && typeof row === 'object'
+  && typeof row.owner_id === 'string' && row.owner_id === userId;
 
 export function createNotesHandler({ clientFactory = createClient, env = process.env, itemRoute = false } = {}) {
   let runtime;
@@ -60,9 +63,12 @@ export function createNotesHandler({ clientFactory = createClient, env = process
       }
       const db = runtime.client;
       if (!itemRoute && req.method === 'GET') {
-        const { data, error } = await db.from('notes').select('id,title,content')
+        const { data, error } = await db.from('notes').select(READ_FIELDS)
           .eq('owner_id', identity.userId).order('position', { ascending: true });
-        if (error || !Array.isArray(data)) throw new Error('Database read failed');
+        // The service key bypasses RLS. Check the stored owner before projecting any note body.
+        if (error || !Array.isArray(data) || !data.every(row => ownsNote(row, identity.userId))) {
+          throw new Error('Database read ownership mismatch');
+        }
         return res.status(200).json(data.map(publicNote));
       }
       if (req.method === 'POST') {
@@ -81,7 +87,7 @@ export function createNotesHandler({ clientFactory = createClient, env = process
       // 타인 소유와 존재하지 않는 메모는 모두 404로 응답합니다.
       let result;
       if (req.method === 'GET') {
-        result = await db.from('notes').select('id,title,content')
+        result = await db.from('notes').select(READ_FIELDS)
           .eq('id', id).eq('owner_id', identity.userId).maybeSingle();
       } else if (req.method === 'PUT') {
         result = await db.from('notes').update({ title: input.title.trim(), content: input.body,
@@ -93,6 +99,10 @@ export function createNotesHandler({ clientFactory = createClient, env = process
       }
       if (result.error) throw new Error('Database operation failed');
       if (!result.data) return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+      if (req.method === 'GET' && (!ownsNote(result.data, identity.userId)
+          || result.data.id?.toLowerCase() !== id)) {
+        return res.status(404).json({ error: '메모를 찾을 수 없습니다.' });
+      }
       return res.status(200).json(req.method === 'DELETE' ? { id: result.data.id } : publicNote(result.data));
     } catch {
       return res.status(502).json({ error: '자료를 불러올 수 없습니다.' });
