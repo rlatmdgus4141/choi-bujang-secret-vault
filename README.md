@@ -1,5 +1,15 @@
 # BYTE BACK 방어전 자료실 R5
 
+## 12단계 보완 저장점 · 격리 환경 제출 묶음
+
+심판 S12_BUNDLE_UNSUPPORTED의 node:util 의존을 JSON 구조 비교로 대체했습니다.
+제출 경로는 npm 패키지·WebCrypto·API 핸들러 시험을 불러오지 않으며 공개 HTTPS GET/HEAD만 사용합니다.
+쓰기 및 승인·복구 통합 시험은 observed를 정확히 `not_run`으로 기록합니다. 미실행은 통과가 아닙니다.
+`npm run ops:check`, `npm run recovery:check`, `npm run device:check`는 기존 별도 시험으로 유지합니다.
+배포된 보고서는 GET으로 조회한 이전 빌드의 가상 시험 근거이며 이번 bundle 실행의 재시험으로 표시하지 않습니다.
+재현: 새 checkout에서 `npm install` → `npm test` → 해당 커밋 배포 확인 → `npm run bundle`.
+step=12와 판정기 계약·기존 보호 API·DB·접속 화면은 그대로 유지합니다.
+
 ## 12단계 저장점 · 탈환 작전실
 
 11단계는 사용자 심판 결과 100점입니다. 기존 판정·탐지·자료실·기기 승인·서명·복구를 보존하고 작전실을 추가했습니다.
