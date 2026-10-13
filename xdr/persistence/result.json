@@ -1,0 +1,155 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "persistence",
+  "decisions": [
+    {
+      "alertId": "ps-01",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "suspicious_service_persistence: 서비스 변경과 위험 실행 근거가 겹침"
+    },
+    {
+      "alertId": "ps-02",
+      "action": "block",
+      "confidence": 0.94,
+      "reason": "suspicious_scheduled_task: 낯선 작업과 위험 실행 경로가 겹침"
+    },
+    {
+      "alertId": "ps-03",
+      "action": "block",
+      "confidence": 0.93,
+      "reason": "unknown_startup_program: 기준 목록 밖 시작 프로그램 추가"
+    },
+    {
+      "alertId": "ps-04",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "suspicious_service_persistence: 서비스 변경과 위험 실행 근거가 겹침"
+    },
+    {
+      "alertId": "ps-05",
+      "action": "block",
+      "confidence": 0.94,
+      "reason": "suspicious_scheduled_task: 낯선 작업과 위험 실행 경로가 겹침"
+    },
+    {
+      "alertId": "ps-06",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "suspicious_service_persistence: 서비스 변경과 위험 실행 근거가 겹침"
+    },
+    {
+      "alertId": "ps-07",
+      "action": "block",
+      "confidence": 0.94,
+      "reason": "suspicious_scheduled_task: 낯선 작업과 위험 실행 경로가 겹침"
+    },
+    {
+      "alertId": "ps-08",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "suspicious_service_persistence: 서비스 변경과 위험 실행 근거가 겹침"
+    },
+    {
+      "alertId": "ps-09",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "suspicious_scheduled_task: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-10",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "unknown_startup_program: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-11",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "suspicious_service_persistence: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-12",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "suspicious_scheduled_task: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-13",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "suspicious_service_persistence: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-14",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "unknown_startup_program: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-15",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "suspicious_scheduled_task: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-16",
+      "action": "alert",
+      "confidence": 0.65,
+      "reason": "suspicious_service_persistence: 지속성 의심 신호, 명확한 격리 근거 부족"
+    },
+    {
+      "alertId": "ps-17",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-18",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-19",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-20",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-21",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-22",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-23",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    },
+    {
+      "alertId": "ps-24",
+      "action": "record",
+      "confidence": 0.1,
+      "reason": "no_match: 지속성 악용을 확정할 근거 없음"
+    }
+  ],
+  "counts": {
+    "block": 8,
+    "alert": 8,
+    "record": 8
+  }
+}

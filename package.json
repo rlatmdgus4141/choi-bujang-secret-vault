@@ -17,7 +17,9 @@
     "xdr:respond": "node scripts/xdr-replay.mjs",
     "test:xdr": "node --test test/xdr-brute-force.test.mjs",
     "xdr:cve:read": "node xdr/known-cve/read-alerts.mjs",
-    "xdr:cve:respond": "node scripts/xdr-known-cve-replay.mjs known-cve"
+    "xdr:cve:respond": "node scripts/xdr-known-cve-replay.mjs known-cve",
+    "xdr:persistence:read": "node xdr/persistence/read-alerts.mjs",
+    "xdr:persistence:respond": "node scripts/xdr-persistence-replay.mjs persistence"
   },
   "engines": {
     "node": ">=22"

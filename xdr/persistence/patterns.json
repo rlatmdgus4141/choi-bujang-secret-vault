@@ -1,0 +1,23 @@
+[
+  {
+    "name": "suspicious_service_persistence",
+    "technique": "T1543",
+    "condition": "새 서비스 등록 또는 실행 파일 변경에 미서명·기준 목록 밖이라는 명확한 신호와 임시 실행 경로가 겹치거나, 미서명 등록이 같은 출발 주소에서 반복된다. 서명 확인 불가나 설명 수정만으로는 차단하지 않는다.",
+    "evidence": "MITRE T1543은 부팅·반복 실행을 위해 서비스 등 시스템 프로세스를 생성하거나 변경하는 지속성을 설명한다.",
+    "source": "https://attack.mitre.org/techniques/T1543/"
+  },
+  {
+    "name": "suspicious_scheduled_task",
+    "technique": "T1053",
+    "condition": "낯선 예약 작업이 임시 실행 파일을 가리키거나, 시작 항목과 같은 임시 파일을 함께 사용한다. 수업 시간의 기존 작업이나 작업 이름 하나만으로 차단하지 않는다.",
+    "evidence": "MITRE T1053은 예약 기능을 이용한 악성 코드의 초기·반복 실행과 원격 작업 생성을 설명한다.",
+    "source": "https://attack.mitre.org/techniques/T1053/"
+  },
+  {
+    "name": "unknown_startup_program",
+    "technique": "T1547.001",
+    "condition": "실제 시작 폴더에 기준 목록 밖 프로그램이 추가되는지 확인한다. 목록 읽기·변경 한 건·실행 기록 없는 경우만으로 차단하지 않는다.",
+    "evidence": "시작 폴더의 로그온 자동 실행은 MITRE T1547.001에 해당한다. 과제 경보는 T1543으로 묶여 있으나 실제 기법 근거는 T1547.001이다.",
+    "source": "https://attack.mitre.org/techniques/T1547/001/"
+  }
+]
