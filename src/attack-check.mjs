@@ -163,6 +163,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     if (config.step >= 7) {
       const { suspicious } = fixtureRequests();
+      const riskResults = [];
       for (const check of [
         { attackId: 'local_compound_risk_step_up', request: suspicious, decision: 'step_up', reason: 'step_up_required' },
         { attackId: 'local_verified_compound_risk', request: { ...suspicious,
@@ -172,8 +173,17 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       ]) {
         const result = await decide(check.request);
         const valid = result.decision === check.decision && result.reasonCode === check.reason;
-        attempts.push({ attackId: check.attackId, expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
+        const attempt = { attackId: check.attackId, expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
           observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 재로그인 실측 아님`
+            : '로컬 추가 확인 규칙 확인 실패' };
+        if (config.step >= 10) riskResults.push(valid);
+        else { attempts.push(attempt); passed.push(valid); }
+      }
+      if (config.step >= 10) {
+        const valid = riskResults.length === 3 && riskResults.every(Boolean);
+        attempts.push({ attackId: 'local_step_up_checks',
+          expected: '로컬 가상 사건: 복합 이상 step_up, 새 확인 allow, 만료 확인 step_up',
+          observed: valid ? '로컬 가상 사건: 추가 확인 3건 모두 통과; 실제 재로그인 실측 아님'
             : '로컬 추가 확인 규칙 확인 실패' });
         passed.push(valid);
       }
@@ -219,6 +229,14 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         expected: '시험 사본 복원 직후 정상·금지 요청을 재실행하고 미실행은 구분',
         observed: `로컬 가상 사건: 복원 뒤 재시험 ${recovery.retests.length}건 실제 실행, retestPassed=${recovery.retestPassed}; 실제 브라우저·운영 회수는 미실행` });
       passed.push(recovery.retestPassed === true);
+      attempts.push({ attackId: 'single_note_restore_matches',
+        expected: '시험 B 한 건의 변조·삭제 뒤 복구 API를 호출해 ID·소유자·내용 해시가 사본과 일치',
+        observed: `로컬 가상 사건: 실제 복구 핸들러를 거쳐 두 경우의 ID·소유자·내용 해시 각각 대조, restoreMatched=${recovery.restoreMatched}; 운영 심판 시험 아님` });
+      passed.push(recovery.restoreMatched === true);
+      attempts.push({ attackId: 'restore_preserves_other_records',
+        expected: '대상 한 건 외의 메모와 기존 감사 기록 보존',
+        observed: `로컬 가상 사건: 변조·삭제 복원 후 다른 메모·기존 감사 대조, preservationPassed=${recovery.preservationPassed}; 실제 사용자 자료 변경 없음` });
+      passed.push(recovery.preservationPassed === true);
     }
     return finish(attempts, passed);
   }

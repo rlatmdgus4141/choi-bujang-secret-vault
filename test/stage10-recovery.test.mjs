@@ -10,6 +10,7 @@ import { createRestoreHandler } from '../api/restore.js';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 import { checkRecovery } from '../scripts/check-recovery.mjs';
+import { noteContentHash } from '../src/note-integrity.mjs';
 
 async function trial(run) {
   const root = await mkdtemp(join(tmpdir(), 'vault-recovery-'));
@@ -68,8 +69,13 @@ test('recovery check re-reads a verified copy, restores it, then executes normal
   const report = await checkRecovery();
   assert.equal(report.backupVerified, true);
   assert.equal(report.retestPassed, true);
+  assert.equal(report.restoreMatched, true);
+  assert.equal(report.preservationPassed, true);
+  for (const phase of ['modified','deleted']) for (const field of ['id','owner','content_hash']) {
+    assert.ok(report.retests.some(x => x.name === `B_${phase}_restore_${field}` && x.passed));
+  }
   assert.equal(report.checks.length, 6);
-  assert.equal(report.retests.length, 39);
+  assert.equal(report.retests.length, 56);
   assert.ok(report.checks.every(x => x.passed) && report.retests.every(x => x.passed));
   assert.equal(report.productionPolicyChanged, false);
   assert.equal(report.scope, 'local_synthetic_only');
@@ -90,7 +96,9 @@ const authorization = async (sub = owner, patch = {}) => `Bearer ${await new Sig
 }).setProtectedHeader({ alg: 'ES256' }).sign(pair.privateKey)}`;
 const response = () => ({ statusCode: 0, headers: {}, setHeader(k,v) { this.headers[k]=v; },
   status(code) { this.statusCode=code; return this; }, json(body) { this.body=body; return this; } });
-function fixture({ error, foreign = false, hash = 'a'.repeat(64) } = {}) {
+const backupRow = { id: noteId, owner_id: owner, title: '가상 제목 👾', content: 'fictional only' };
+function fixture({ error, foreign = false, hash = noteContentHash(backupRow.title, backupRow.content),
+  changedHash = false, changedRow = {}, readError = false } = {}) {
   const calls = [];
   const handler = createRestoreHandler({ env, clientFactory: () => ({
     auth: { async getClaims(token) {
@@ -101,7 +109,15 @@ function fixture({ error, foreign = false, hash = 'a'.repeat(64) } = {}) {
       calls.push({ name, args });
       if (error || args.p_owner !== owner) return { data: null, error: error ?? { code: 'P0002' } };
       return { data: { id: args.p_id, owner_id: foreign ? randomUUID() : owner,
-        hash, restored: !args.p_dry_run, backupVersion: 'stage10-v1', content: 'must not escape' }, error: null };
+        hash: changedHash && !args.p_dry_run ? 'b'.repeat(64) : hash,
+        restored: !args.p_dry_run, backupVersion: 'stage10-v1', content: 'must not escape' }, error: null };
+    },
+    from(table) {
+      assert.equal(table, 'notes');
+      return { select(fields) { assert.equal(fields, 'id,owner_id,title,content'); return this; },
+        eq(k,v) { assert.equal(v, k === 'id' ? noteId : owner); return this; },
+        async maybeSingle() { return readError ? { data: null, error: {} }
+          : { data: { ...backupRow, ...changedRow }, error: null }; } };
     },
   }) });
   return { handler, calls };
@@ -125,7 +141,7 @@ test('restore and dry run bind verified owner and return only verified ID/hash/v
   for (const dryRun of [true, false]) {
     const res = response(); await handler(request(await authorization(), { id: noteId, dryRun }), res);
     assert.equal(res.statusCode, 200); assert.equal(res.body.restored, !dryRun);
-    assert.deepEqual(Object.keys(res.body).sort(), ['backupVersion','hash','id','restored']);
+    assert.deepEqual(Object.keys(res.body).sort(), ['backupVersion','hash','id','owner_id','restored']);
   }
   assert.ok(calls.every(c => c.name === 'vault_restore_note' && c.args.p_owner === owner));
 });
@@ -149,4 +165,32 @@ test('restore permits only its exact POST route without query selectors', async 
     assert.ok([400,405].includes(res.statusCode));
   }
   assert.equal(calls.length, 0);
+});
+
+test('restore compares snapshot, RPC and re-read row ID/owner/content independently and refuses mismatch', async () => {
+  for (const options of [{ changedHash: true }, { changedRow: { id: randomUUID() } },
+    { changedRow: { owner_id: randomUUID() } }, { changedRow: { content: 'corrupt fake body' } }]) {
+    const res = response();
+    await fixture(options).handler(request(await authorization()), res);
+    assert.equal(res.statusCode, 409);
+    assert.deepEqual(Object.keys(res.body), ['error']);
+  }
+  const readFailure = response();
+  await fixture({ readError: true }).handler(request(await authorization()), readFailure);
+  assert.equal(readFailure.statusCode, 502);
+});
+test('dry run re-reads verified snapshot but never calls mutating restore', async () => {
+  const { handler, calls } = fixture(); const res = response();
+  await handler(request(await authorization(), { id: noteId, dryRun: true }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.owner_id, owner);
+  assert.equal(res.body.hash, noteContentHash(backupRow.title, backupRow.content));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.p_dry_run, true);
+});
+
+test('note hash uses UTF-8 byte length and matches the actual SQL digest on Korean and emoji', () => {
+  assert.equal(noteContentHash('가상 제목 👾', 'fictional only'),
+    'c7500334ae5861e50b83f7340988158b101637ff46acedcc919c8bd2910cc50e');
+  assert.notEqual(noteContentHash('ab','c'), noteContentHash('a','bc'));
 });

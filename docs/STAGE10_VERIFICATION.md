@@ -21,7 +21,7 @@ allowedRoutes에 `POST /api/restore`를 함께 선언하고 빌드의 `/aleph.js
 Authorization은 기존 verify-login.mjs로 검증합니다. 본문은 `{ "id": "<UUID>" }`입니다.
 선택적으로 `{ "id": "<UUID>", "dryRun": true }`를 보내면 사본을 검증하고 변경 없이 범위·해시를 확인합니다.
 소유자·role·메모 내용은 본문에서 받지 않습니다. 검증된 사용자 ID로만 해당 사본을 선택합니다.
-응답은 `{id,restored,hash,backupVersion}`이며 메모 내용, 키, 토큰을 돌려주거나 로그에 적지 않습니다.
+현재 응답은 `{id,owner_id,restored,hash,backupVersion}`이며 메모 내용, 키, 토큰을 돌려주거나 로그에 적지 않습니다.
 무로그인은 401 JSON, 없는/타인 사본은 404, 손상 사본은 409, 연결 장애는 502입니다.
 
 `supabase/stage10-recovery.sql`은 최초 한 번 적용하는 비파괴 초기화입니다. 이미 적용한 DB에 재실행하지 않습니다.
@@ -49,7 +49,7 @@ B의 임시 가상 메모 생성 → 사본 기록 → 삭제 → 복구도 true
 두 시험은 BEGIN/ROLLBACK 안에서 실행해 시험 전 메모와 감사 기록을 그대로 유지했습니다.
 실제 DB 복구 함수의 시험이며, 브라우저 B 토큰으로 배포 HTTP 복구를 실행한 결과는 아닙니다.
 
-`npm run test:recovery` 7건은 사본 누락/손상/확인 번호 만료, 다른 정책·감사 보존,
+`npm run test:recovery` 10건은 사본 누락/손상/확인 번호 만료, 다른 정책·감사 보존,
 정상/미등록/전체 목록 판정, 복구 API 인증·소유자·응답 검증·경로 제한을 시험합니다.
 기존 A/B CRUD 및 타인 행 거부 시험을 포함한 `npm test`와 `npm run decider:test`,
 `npm run fixture:7`, `npm run detect:test`를 다시 실행합니다.
@@ -109,3 +109,29 @@ URL은 `https://choi-bujang-secret-vault-rosy.vercel.app/recovery-verification.j
 실제 복구 API나 DB 사본의 권한은 이번 근거 보완으로 변경하지 않았습니다.
 
 이번 보완 후 전체 회귀 시험: main 124건, defense-r5 109건 모두 통과했습니다.
+
+## 한 건 복원 일치 보완
+
+S10_RESTORE_MISMATCH의 내부 판정식/요청 형식은 확인되지 않았습니다. Vercel 로그 조회는 403 권한 오류였고
+학습 DB에는 심판의 새 복구 감사가 확인되지 않아 실제 배포 호출 여부를 단정하지 않습니다.
+현재 가상 시험이 rows.set으로 메모를 직접 복원하던 빈틈을 확인해 실제 복구 핸들러를 호출하도록 교체했습니다.
+
+복구 API는 같은 ID/검증 사용자로 사본 RPC(dryRun) → 복구 RPC → 메모 한 건 재조회 순서로 실행합니다.
+사본·복구 응답·최종 행의 ID, 소유자, 내용 해시와 버전을 대조하고 차이가 있으면 409 오류입니다.
+제목/본문의 UTF-8 바이트 길이 접두 SHA-256을 DB와 Node가 동일하게 계산합니다.
+한국어/이모지가 있는 가상 값의 실제 SQL/Node 해시도 일치했습니다.
+복구 응답은 검증된 소유자 ID를 추가하고, 메모 본문은 여전히 반환하거나 로그에 남기지 않습니다.
+소유자·해시·내용을 사용자 본문에서 받아 사본을 만드는 경로는 추가하지 않았습니다.
+
+`npm run recovery:check -- --write`는 변조와 삭제 두 경우 모두 실제 createRestoreHandler를 실행합니다.
+사본 미리보기, 복구, DB 행 재조회와 각각의 ID·소유자·내용 해시, 다른 메모/기존 감사 보존을 확인합니다.
+결과는 사본 검증 6건·재시험 56건이며 `restoreMatched`와 `preservationPassed`를 별도로 기록합니다.
+이것은 서명된 가상 계정/DB 어댑터를 사용하는 시험입니다. 실제 Supabase 시험과 혼동하지 않습니다.
+
+학습 Supabase에서도 `supabase/verify-stage10-restore.sql`을 실행했습니다. B 한 건에 한정해
+변조/삭제 각각에서 ID 일치·소유자 일치·내용 해시 일치·다른 메모 보존·기존 감사 보존이 모두 true였습니다.
+시험은 BEGIN/ROLLBACK으로 기존 메모와 감사 기록을 보존했습니다. 새 마이그레이션이나 권한 변경은 없습니다.
+제출 점검에 `single_note_restore_matches`와 `restore_preserves_other_records`를 각각 추가했습니다.
+기기 3건과 추가 확인 3건은 실행을 유지하고 결과만 묶어 전체 20개 형식을 보존합니다.
+
+이번 일치 보완 후 전체 회귀 시험: main 127건, defense-r5 112건 모두 통과했습니다.
