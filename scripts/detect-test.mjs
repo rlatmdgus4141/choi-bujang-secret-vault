@@ -12,6 +12,17 @@ function reads(count, { intervalSeconds = 2, owner = subject, start = START } = 
   }));
 }
 
+// Device-aware local fixture, not an operational engine integration.
+export function deviceReads(count, { deviceId = 'a'.repeat(16), owner = subject,
+  network = 'unusual', source = 'judge_fixture', intervalSeconds = 2, start = START,
+  region = 'foreign', decision = 'allow', classId = 'class_fixture', projectId = 'project_fixture' } = {}) {
+  return Array.from({ length: count }, (_, index) => ({
+    at: new Date(start + index * intervalSeconds * 1000).toISOString(), method: 'GET',
+    classId, projectId, subjectId: owner, deviceId, decision,
+    signals: { source, region, network, hour: 14 },
+  }));
+}
+
 const cases = [
   { name: '정상 조회 30건', events: reads(30), expected: { action: 'observe' } },
   { name: '10분 안에 120건', events: reads(120), expected: { action: 'observe' } },
@@ -24,6 +35,19 @@ const cases = [
   expected: { action: 'observe' } },
   { name: '10분 밖으로 흩어진 조회 200건', events: reads(200,
     { intervalSeconds: 7 }), expected: { action: 'observe' } },
+  { name: '평소 네트워크의 조회 200건', events: deviceReads(200, { network: 'usual' }),
+    expected: { action: 'observe' } },
+  { name: '낯선 네트워크지만 조회 120건', events: deviceReads(120),
+    expected: { action: 'observe' } },
+  { name: '낯선 네트워크와 조회 121건', events: deviceReads(121), expected: {
+    action: 'propose_revocation', reasonCode: 'burst_read', subject, deviceId: 'a'.repeat(16) } },
+  { name: '같은 사용자·다른 기기 각 100건', events: [...deviceReads(100),
+    ...deviceReads(100, { deviceId: 'b'.repeat(16) })], expected: { action: 'observe' } },
+  { name: '출처가 불명확한 네트워크', events: deviceReads(200, { source: 'client' }),
+    expected: { action: 'observe' } },
+  { name: '의심 기기 한 개와 정상 기기 유지', events: [...deviceReads(121),
+    ...deviceReads(200, { network: 'usual', deviceId: 'b'.repeat(16) })], expected: {
+    action: 'propose_revocation', reasonCode: 'burst_read', subject, deviceId: 'a'.repeat(16) } },
 ];
 
 // This is a practice contract, not a live engine assertion or judge score.

@@ -160,7 +160,7 @@ test('current deployment identity and unchanged starter verifier', async () => {
   const identity = deploymentIdentity({ VERCEL_GIT_PROVIDER: 'github',
     VERCEL_GIT_REPO_OWNER: 'fixture', VERCEL_GIT_REPO_SLUG: 'vault',
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), VERCEL_URL: 'fixture.vercel.app' }, config);
-  assert.equal(identity.step, 8);
+  assert.equal(identity.step, config.step);
   assert.equal(identity.originalApiUrl, config.originalApiUrl);
   assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
   const source = await readFile(new URL('../src/verify-login.mjs', import.meta.url));

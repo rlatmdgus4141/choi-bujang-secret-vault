@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { decide } from './decider.mjs';
+import { detect } from './detect.mjs';
+import { checkDetection } from '../scripts/detect-test.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
@@ -12,7 +14,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -170,9 +172,17 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         const { decision, ...input } = check;
         valid &&= (await decide({ ...normal, ...input })).decision === decision;
       }
-      attempts.push({ attackId: 'local_resource_zone_rules',
-        expected: '로컬 가상 사건: 메모 한 건 CRUD/추가 allow, 전체 목록·공지 쓰기·기능 경로 deny',
-        observed: valid ? '로컬 가상 사건: 정상 메모 경로 allow, 전체 목록·공지 쓰기·export deny; 실제 심판 시험 아님, 소유자 비교는 API 시험으로 별도 확인'
+      if (config.step >= 9) {
+        const detections = await checkDetection(detect);
+        valid &&= detections.every(item => item.passed);
+      }
+      attempts.push({ attackId: config.step >= 9 ? 'local_zone_and_detection_rules' : 'local_resource_zone_rules',
+        expected: config.step >= 9
+          ? '로컬 가상 사건: 기존 구역 제한 유지, 탐지 연습과 복합 기기 사건의 회수 제안 검사'
+          : '로컬 가상 사건: 메모 한 건 CRUD/추가 allow, 전체 목록·공지 쓰기·기능 경로 deny',
+        observed: valid ? config.step >= 9
+          ? '로컬 가상 사건: 구역 제한과 탐지 연습 12건 통과; 복합 기기 사건만 대상 1개 제안, 정상 기기는 observe; 실제 접속 회수·경과 시간은 미검증'
+          : '로컬 가상 사건: 정상 메모 경로 allow, 전체 목록·공지 쓰기·export deny; 실제 심판 시험 아님, 소유자 비교는 API 시험으로 별도 확인'
           : '로컬 자원 구역 규칙 확인 실패' });
       passed.push(valid);
     }
