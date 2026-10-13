@@ -12,7 +12,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -114,7 +114,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           : '화면 코드의 공개 키 제거 확인 실패' });
       passed.push(noClientKey);
     }
-    if (config.step === 6) {
+    if (config.step >= 6) {
       const { normal } = fixtureRequests();
       for (const check of [
         { attackId: 'local_registered_device_read', flag: true, decision: 'allow', reason: 'approved' },
@@ -129,6 +129,23 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
           observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 mTLS·심판 시험 아님`
             : '로컬 기기 조건 확인 실패' });
+        passed.push(valid);
+      }
+    }
+    if (config.step === 7) {
+      const { suspicious } = fixtureRequests();
+      for (const check of [
+        { attackId: 'local_compound_risk_step_up', request: suspicious, decision: 'step_up', reason: 'step_up_required' },
+        { attackId: 'local_verified_compound_risk', request: { ...suspicious,
+          stepUp: { verified: true, authAgeSeconds: 60 } }, decision: 'allow', reason: 'approved' },
+        { attackId: 'local_expired_step_up', request: { ...suspicious,
+          stepUp: { verified: true, authAgeSeconds: 901 } }, decision: 'step_up', reason: 'step_up_required' },
+      ]) {
+        const result = await decide(check.request);
+        const valid = result.decision === check.decision && result.reasonCode === check.reason;
+        attempts.push({ attackId: check.attackId, expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
+          observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 재로그인 실측 아님`
+            : '로컬 추가 확인 규칙 확인 실패' });
         passed.push(valid);
       }
     }

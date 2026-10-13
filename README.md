@@ -1,5 +1,61 @@
 # BYTE BACK 방어전 자료실 R5
 
+## 7단계 저장점 · 복합 이상 접속의 추가 확인
+
+6단계는 사용자 재제출 결과 90점으로 통과했습니다(2026-10-13).
+7단계에는 기존 device_registered와 기본 거부 규칙을 유지하고 step_up_required를 추가했습니다.
+현재 동작: 정상 notes 읽기 allow, 미등록 deny/device_not_registered, 복합 이상 step_up/step_up_required입니다.
+등록 상태나 접속 정보는 브라우저가 아니라 반 엔진이 검증해 전달한 계약 필드만 읽습니다.
+
+### 출처와 입력 검사
+
+- `signals.source === 'judge_fixture'`: 엔진이 전달하는 가상 사건으로만 다룹니다. 실제 사용자 위치라는 뜻이 아닙니다.
+- `signals.source === 'none'`: region/network의 unknown을 그대로 유지합니다. local/usual로 채우지 않습니다.
+- 출처 불명, 누락 필드, 잘못된 시각·사건 형식은 기존 기본 거부를 사용합니다.
+- 클라이언트 위치·시각·재로그인 헤더와 임의 identity/geo 필드는 읽지 않습니다.
+- recentEvents는 최대 12개이며 kind·ageSeconds·count 형식을 검사합니다.
+
+### 가상 사건 정책과 사유
+
+foreign 지역, 00~05시, unusual 네트워크, 최근 300초 risk_signal 합계 10건 이상 중
+두 가지 이상이 겹치면 추가 확인을 요구합니다. 수치는 이 실습의 명시적인 정책이며 실제 개인의 생활 패턴을 추정한 값이 아닙니다.
+지역 하나 또는 시각 하나만으로 차단하지 않습니다. 추가 확인 응답에는 자료 없이
+reasonCode와 ruleIds의 step_up_required만 반환하며 원문 사건·토큰을 로그에 넣지 않습니다.
+미등록 기기는 재확인 여부와 무관하게 6단계 규칙에서 먼저 거부합니다.
+
+### 재로그인 계약과 실측 범위
+
+docs/DECIDER_REQUEST.md에는 엔진의 stepUp `{verified, authAgeSeconds}`가 있습니다.
+엔진이 같은 신원을 새 로그인으로 검증해 준 요청에서 verified가 정확히 true이고 나이가 0~900초일 때만
+추가 확인 조건을 해소합니다. 이후에도 기존 서비스·동작·경로 허용 조건을 다시 검사합니다.
+문자열 true, 누락·null·음수·901초 이상 시각은 확인 완료로 취급하지 않습니다.
+판정기가 토큰을 만들거나 토큰 원문에서 재로그인을 추정하지 않습니다.
+
+저장소에는 제공 엔진의 실제 재로그인 도전·완료를 호출할 경로와 실행 세션이 없습니다.
+따라서 이번 검증은 공식 가상 사건의 확인 전/후 판정이며, 실제 동일 사용자 재로그인 시각 검증,
+실제 민감 자료 차단 및 새 로그인 뒤 허용 실측은 **미실행**입니다. 엔진이 준비된 환경에서 심판이 확인합니다.
+기존 Vercel 화면에 임의의 재인증 확인 기능이나 자체 발급 토큰을 추가하지 않았습니다.
+
+### 확인 명령과 결과
+
+```sh
+npm run decider:test
+npm run fixture:7
+node --test test/stage6-decider.test.mjs test/stage7-decider.test.mjs
+# defense-r5의 현재 커밋 배포가 완료된 뒤
+npm run bundle
+```
+
+공식 연습 네 항목(등록 정상, 미등록, 복합 이상, 다시 확인한 복합 이상)이 모두 통과했습니다.
+fixture:7은 정상 allow / 복합 이상 step_up입니다. 배포 브랜치 회귀 시험 44개가 통과했고,
+main의 기기·추가 확인 시험 9개와 보너스 회귀 시험 20개가 통과했습니다.
+이 결과는 심판 점수가 아닙니다. 다음 기록은 이전 단계의 저장점입니다.
+
+배포 설정은 step 7이며 기존 주소·발급자·허용 API 경로·원본 API·judgeIssuer를 유지합니다.
+심판 기본 브랜치 main과 배포 브랜치 defense-r5에 같은 판정기를 반영합니다.
+main의 보너스와 시작 틀은 보존하고 앱 배포는 defense-r5만 사용합니다.
+
+
 ## 6단계 저장점 · 등록 기기 읽기 조건
 
 `src/decider.mjs`에 `device_registered` 규칙을 구현했습니다.
