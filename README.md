@@ -1,4 +1,36 @@
-# 보너스 xdr-02 제출 저장점
+# 6단계 저장점 · 보너스 모듈 보존
+
+## 6단계 저장점 · 등록 기기 읽기 조건
+
+`src/decider.mjs`에 `device_registered` 규칙을 구현했습니다.
+사용자는 엔진이 검증한 `subjectId`, 기기는 `deviceId`, 등록 여부는 `deviceRegistered`로 전달됩니다.
+`deviceRegistered === true`일 때만 엔진이 확인한 사용자·기기의 notes GET 읽기 경로를 허용합니다.
+미등록·누락·잘못된 등록 값은 deny / device_not_registered입니다.
+다른 서비스·동작·일치하지 않는 경로는 기존 기본 거부를 유지합니다.
+브라우저가 보낸 userId·role·등록 여부를 새 신뢰 값으로 사용하지 않습니다.
+인증서·CA·개인키·새 접속 프로그램은 만들지 않았습니다.
+
+```sh
+npm run decider:test
+node --test test/stage6-decider.test.mjs
+# 배포 브랜치 defense-r5의 커밋과 실제 배포가 일치한 뒤 실행
+npm run bundle
+```
+
+공식 로컬 연습 결과: 등록 기기 정상 요청 allow, 미등록 가상 요청 deny / device_not_registered 모두 통과했습니다.
+6단계 경계값 시험 3개도 통과했습니다. 배포 브랜치 전체 회귀 시험 38개와 main의 보너스 회귀 시험 20개가 통과했습니다.
+추가 시험은 등록 여부 누락·문자열·숫자 등도 거부하고 notes 읽기 외 동작을 열지 않는지 확인합니다.
+이 시험은 가상 요청의 정책 검사이며 실제 인증서·mTLS·사용자-기기 결합 공격은 심판이 검사합니다.
+기존 자료실 주소와 로그인·메모 CRUD 화면, 서버 API와 DB 설정은 유지합니다.
+실제 사용자 브라우저의 정상 화면은 배포 후 다시 확인하고, 미실행 시험을 완료로 기록하지 않습니다.
+
+배포 브랜치는 defense-r5이고 기본 브랜치 main에도 동일한 src/decider.mjs를 반영합니다.
+배포 브랜치 설정은 step 6이며 기존 로그인 발급자·허용 API 경로·원본 API 주소·judgeIssuer를 유지합니다.
+main의 시작 틀 설정은 보존하고, 심판이 읽는 기기 판정 규칙과 시험만 같은 버전으로 맞춥니다.
+main에 남아 있는 시작 틀 화면을 새로 운영 배포하지 않습니다.
+보너스 모듈은 기존 판정기에 덧붙이는 연결이며 이번 기기 규칙도 그대로 전달합니다.
+이후 문서의 starter.deny 전용 설명은 6단계 이전 기록입니다.
+
 
 기본 브랜치 `main`에서 심판이 읽는 `xdr/brute-force/decide.mjs`를 제공합니다.
 이 모듈은 `defense-r5`의 `3b89300878a128e99c520591daa6b0b9f7ecc667`과 같습니다.
