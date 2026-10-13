@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runAttackChecks } from '../src/attack-check.mjs';
@@ -36,6 +38,12 @@ function passingResponse(url) {
 
 test('strict self-checks preserve the submission schema when all actual responses pass', async () => {
   const previous = globalThis.fetch;
+  const originalRead = fs.readFileSync;
+  fs.readFileSync = (path, ...args) => {
+    if (typeof path !== 'string') throw new Error('path_format');
+    return originalRead(path, ...args);
+  };
+  syncBuiltinESMExports();
   try {
     globalThis.fetch = async (url, init = {}) => {
       assert.ok(['GET', 'HEAD'].includes(init.method ?? 'GET'));
@@ -56,7 +64,11 @@ test('strict self-checks preserve the submission schema when all actual response
     assert.ok(attempts.every(attempt =>
       Object.keys(attempt).sort().join(',') === 'attackId,expected,observed'));
     assert.equal(JSON.stringify(attempts).includes('sb_publishable_'), false);
-  } finally { globalThis.fetch = previous; }
+  } finally {
+    globalThis.fetch = previous;
+    fs.readFileSync = originalRead;
+    syncBuiltinESMExports();
+  }
 });
 
 test('strict self-checks reject leaked static data, permitted app access and direct API regressions', async () => {

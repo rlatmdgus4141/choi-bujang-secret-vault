@@ -1,5 +1,14 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 12단계 보완 저장점 · path_format
+
+심판 45점 기록의 첫 오류는 제출 묶음의 `path_format`입니다.
+URL 객체를 파일 경로로 받지 않는 조건에서 같은 오류를 재현했고,
+자기 점검의 파일 읽기 한 곳을 `fileURLToPath`로 변환한 문자열 경로로 고쳤습니다.
+HTTP 점검 결과·not_run 구분·화면 수치·보호 API·판정 규칙은 변경하지 않았습니다.
+재현: `node --test test/stage5-checks.test.mjs` → `npm test` → 검사한 main 커밋을 운영 배포 → `npm run bundle`.
+제출 커밋과 `/aleph.json`의 commit이 같아야 합니다. 아래 defense-r5 배포 설명은 이전 운영 이력입니다.
+
 ## 12단계 보완 저장점 · 격리 환경 제출 묶음
 
 심판 S12_BUNDLE_UNSUPPORTED의 node:util 의존을 JSON 구조 비교로 대체했습니다.
@@ -26,7 +35,7 @@ step=12와 판정기 계약·기존 보호 API·DB·접속 화면은 그대로 �
 1. 설치: 기존 저장소의 검사 대상 커밋을 별도 폴더에 checkout하고 Node 22 이상에서 `npm ci`를 실행합니다.
 2. 학생 판정기: `npm run decider:test`; 탐지: `npm run detect:test`. 가상 연습이며 운영 엔진 시험과 구분합니다.
 3. 통합·복구·접속 앱: `npm run ops:check`, `npm test`, `npm run build -- --local`. 로컬 정적 빌드는 서버 실행이 아닙니다.
-4. 서버 실행: 기존 Vercel 프로젝트의 defense-r5 브랜치를 배포합니다. 기존 Supabase URL·서버 키는 공식 비밀 설정에만 유지합니다. 새 비밀값을 코드나 묶음에 넣지 않습니다. 기존 DB에 schema.sql/단계 SQL을 무작정 재실행하지 않습니다.
+4. 서버 실행: 기존 Vercel 프로젝트에 검사한 main 커밋을 Production으로 지정 배포합니다. 기존 Supabase URL·서버 키는 공식 비밀 설정에만 유지합니다. 새 비밀값을 코드나 묶음에 넣지 않습니다. 기존 DB에 schema.sql/단계 SQL을 무작정 재실행하지 않습니다.
 5. 접속 앱 실행: 배포 주소를 열어 로그인 → 기기 승인 → 본인 자료실. 아래 작전실에서 공개 API 점검, 승인 기기 읽기 점검을 실행합니다. 설치 표시는 기기 승인이 아닙니다.
 6. 실측: `npm run ops:live`는 현재 커밋의 실제 공개/금지 API 결과를 저장합니다. `npm run bundle`은 기존 점검과 작전실 근거를 확인해 제출 JSON을 만듭니다.
 7. 중지: 브라우저에서 로그아웃하여 해당 등록을 회수하고 RAM 키·토큰을 지운 뒤 창을 닫습니다. 로컬 시험 명령 중지는 Ctrl+C입니다. 탭 종료만으로 엔진의 모든 신원이 회수된다고 보장하지 않습니다. 공유 ALEPH SDP 엔진의 실행·중지는 운영자가 담당하며 이 저장소는 엔진 프로세스를 설치하지 않습니다. 인증·RLS를 풀어서 중지하지 않습니다.

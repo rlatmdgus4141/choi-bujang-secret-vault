@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
@@ -76,7 +77,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         throw new Error('원본 자료 주소가 해당 Supabase 메모 경로와 다릅니다.');
       }
       // 서버 Auth 함수의 공개 키만 사용합니다. 사용자 JWT나 서버 전용 키는 읽지 않습니다.
-      const authServer = readFileSync(new URL('../api/auth.js', import.meta.url), 'utf8');
+      const authServer = readFileSync(fileURLToPath(new URL('../api/auth.js', import.meta.url)), 'utf8');
       const publicKey = authServer.match(/const publishableKey = '(sb_publishable_[A-Za-z0-9_-]+)'/u)?.[1];
       if (!publicKey) throw new Error('공개 키를 확인할 수 없어 원본 API 점검을 중단했습니다.');
       for (const method of ['GET', 'PATCH']) {
