@@ -2,13 +2,14 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deploymentIdentity } from './deployment-identity.mjs';
 import { checkRecovery } from './check-recovery.mjs';
+import { checkDeviceFlow } from './check-device.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'data.json');
 const output = resolve(root, 'public', 'data.json');
 const config = JSON.parse(await readFile(resolve(root, 'aleph.config.json'), 'utf8'));
-if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
-  throw new Error('현재 구현된 자료실 단계는 1~10단계입니다.');
+if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
+  throw new Error('현재 구현된 자료실 단계는 1~11단계입니다.');
 }
 const data = JSON.parse(await readFile(source, 'utf8'));
 if (!Array.isArray(data.notes)) {
@@ -38,5 +39,11 @@ if (!process.argv.includes('--local')) {
     await writeFile(resolve(root, 'public/recovery-verification.json'),
       `${JSON.stringify({ ...recovery, commit: identity.commit }, null, 2)}\n`, 'utf8');
     console.log('사본 재검증·시험 복원 뒤 재시험을 실행해 공개 검증 근거를 생성했습니다.');
+    if (config.step >= 11) {
+      const device = await checkDeviceFlow();
+      await writeFile(resolve(root, 'public/device-verification.json'),
+        `${JSON.stringify({ ...device, commit: identity.commit }, null, 2)}\n`, 'utf8');
+      console.log('앱 승인·요청 서명 연습 결과를 생성했습니다.');
+    }
   }
 }

@@ -4,6 +4,7 @@ import { detect } from './detect.mjs';
 import { checkDetection } from '../scripts/detect-test.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 import { checkRecovery } from '../scripts/check-recovery.mjs';
+import { checkDeviceFlow } from '../scripts/check-device.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
@@ -15,7 +16,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -133,6 +134,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           : '화면 코드의 공개 키 제거 확인 실패' });
       passed.push(noClientKey);
     }
+    const localStart = attempts.length;
     if (config.step >= 6) {
       const { normal } = fixtureRequests();
       const deviceResults = [];
@@ -219,6 +221,15 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           : '로컬 자원 구역 규칙 확인 실패' });
       passed.push(valid);
     }
+    if (config.step >= 11) {
+      const local = attempts.splice(localStart), results = passed.splice(localStart);
+      const valid = local.length === 3 && results.length === 3 && results.every(Boolean);
+      attempts.push({ attackId: 'local_existing_device_risk_zone_detection',
+        expected: '로컬 가상 사건: 이전 기기 3건·추가 확인 3건·구역 제한·탐지 규칙 보존',
+        observed: valid ? '로컬 가상 사건: 기존 기기·위험·구역·탐지 시험 모두 통과; 실제 운영 엔진 실측 아님'
+          : '이전 규칙 보존 확인 실패' });
+      passed.push(valid);
+    }
     if (config.step >= 10) {
       const recovery = await checkRecovery();
       attempts.push({ attackId: 'backup_verified',
@@ -237,6 +248,37 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         expected: '대상 한 건 외의 메모와 기존 감사 기록 보존',
         observed: `로컬 가상 사건: 변조·삭제 복원 후 다른 메모·기존 감사 대조, preservationPassed=${recovery.preservationPassed}; 실제 사용자 자료 변경 없음` });
       passed.push(recovery.preservationPassed === true);
+    }
+    if (config.step >= 11) {
+      const device = await checkDeviceFlow();
+      attempts.push({ attackId: 'app_approval_and_request_signatures',
+        expected: '서버 승인 전 자료 없음, 승인 후 정상 CRUD, 무서명·경로/본문 변조·다른 사용자·재전송 거부',
+        observed: `로컬 가상 사건: 실제 WebCrypto 클라이언트와 서버 핸들러 ${device.checks.length}건 실행, passed=${device.passed}; 운영 심판 시험 아님` });
+      passed.push(device.passed === true);
+      const manifest = await fetch(new URL('/manifest.webmanifest',app), {signal:AbortSignal.timeout(15000)});
+      let installable = false;
+      try {
+        const data = await manifest.json();
+        installable = manifest.ok && data.start_url === '/' && data.scope === '/'
+          && data.display === 'standalone' && data.icons?.length === 2;
+        for (const icon of data.icons ?? []) {
+          const url = new URL(icon.src,app);
+          if(url.origin !== app.origin){installable=false;break;}
+          const response = await fetch(url,{signal:AbortSignal.timeout(15000)});
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          installable &&= response.ok && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
+        }
+      } catch { installable = false; }
+      const worker = await fetch(new URL('/sw.js',app),{signal:AbortSignal.timeout(15000)});
+      const source = await worker.text();
+      const offline = await fetch(new URL('/offline.html',app),{signal:AbortSignal.timeout(15000)});
+      installable &&= worker.ok && source.includes("url.pathname.startsWith('/api/')")
+        && source.includes('/offline.html') && !source.includes('cache.put') && offline.ok;
+      attempts.push({attackId:'installable_public_offline_shell',
+        expected:'manifest·아이콘·오프라인 안내가 열리고 보호 API는 캐시하지 않음',
+        observed:installable?'실제 배포의 manifest·PNG 아이콘 2개·오프라인 안내·API 캐시 제외 확인'
+          :'설치형 앱 공개 파일 확인 실패'});
+      passed.push(installable);
     }
     return finish(attempts, passed);
   }

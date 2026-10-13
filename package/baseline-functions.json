@@ -5,6 +5,7 @@
   "allowedNew": [
     "api/ai.js",
     "api/auth.js",
+    "api/device.js",
     "api/notes.js",
     "api/notices.js",
     "api/restore.js",

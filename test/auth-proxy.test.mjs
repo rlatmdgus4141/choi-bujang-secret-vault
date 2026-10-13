@@ -77,7 +77,7 @@ test('official SDK login, refresh and local sign-out use the proxy without a bro
     assert.equal(init.headers.Authorization, undefined);
     return Response.json(session);
   } });
-  const authFetch = runInNewContext(`${prefix}\nauthFetch`, { URL, URLSearchParams, Headers, Request,
+  const authFetch = runInNewContext(`${prefix}\nauthFetch`, { deviceClient: { publicKeyHash: null, rememberEnrollmentGrant() {} }, URL, URLSearchParams, Headers, Request,
     fetch: async (path, init) => {
       assert.ok(path.startsWith('/api/auth?'));
       assert.equal(init.headers.has('apikey'), false);
@@ -101,7 +101,7 @@ test('official SDK login, refresh and local sign-out use the proxy without a bro
   assert.equal((await client.auth.signOut({ scope: 'local' })).error, null);
   assert.equal((await client.auth.getSession()).data.session, null);
   assert.deepEqual(operations, ['password', 'refresh_token', 'logout']);
-  assert.throws(() => authFetch(`${projectUrl}/rest/v1/notes`, {}));
+  await assert.rejects(authFetch(`${projectUrl}/rest/v1/notes`, {}));
 });
 
 test('Auth API response version preserves official SDK login error codes', async () => {

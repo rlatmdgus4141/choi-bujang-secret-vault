@@ -19,6 +19,10 @@ const identity = () => ({
 
 function passingResponse(url) {
   const path = new URL(url).pathname;
+  if (path === '/manifest.webmanifest') return Response.json({start_url:'/',scope:'/',display:'standalone',icons:[{src:'/icons/icon-192.png'},{src:'/icons/icon-512.png'}]});
+  if (path.startsWith('/icons/')) return new Response(new Uint8Array([137,80,78,71]));
+  if (path === '/sw.js') return new Response("url.pathname.startsWith('/api/') /offline.html");
+  if (path === '/offline.html') return new Response('offline guide');
   if (path === '/data.json') return Response.json({ notes: [] });
   if (path === '/rest/v1/notes') return Response.json({ code: '42501' }, { status: 401 });
   if (path === '/') return new Response('<script src="/auth.js"></script>', {
@@ -34,7 +38,7 @@ test('strict self-checks preserve the submission schema when all actual response
     const attempts = await runAttackChecks(config, { requirePass: true });
     assert.equal(attempts.length, 20);
     const local = attempts.filter(attempt => attempt.attackId.startsWith('local_'));
-    assert.equal(local.length, 3);
+    assert.equal(local.length, config.step >= 11 ? 1 : 3);
     assert.ok(attempts.some(x => x.attackId === 'single_note_restore_matches'));
     assert.ok(attempts.some(x => x.attackId === 'restore_preserves_other_records'));
     assert.ok(attempts.some(x => x.attackId === 'backup_verified'));

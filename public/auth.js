@@ -1,9 +1,15 @@
-(() => {
+(async () => {
   'use strict';
+  const { createDeviceClient } = await import('/device-client.js');
+  const deviceClient = createDeviceClient();
+  const devicePanel = document.querySelector('#device-panel');
+  const deviceState = document.querySelector('#device-state');
+  const approveButton = document.querySelector('#approve-device');
+  try { localStorage.removeItem('sb-nsqtwulghnijprefvfud-auth-token'); } catch { /* 이전 버전의 저장 세션만 삭제합니다. */ }
   // 공식 SDK의 Auth 요청만 같은 출처의 서버 함수로 전달합니다.
   const projectUrl = 'https://nsqtwulghnijprefvfud.supabase.co';
   const authTransport = 'server-auth'; // SDK 초기화용 표식이며 Supabase 키가 아닙니다.
-  function authFetch(input, init) {
+  async function authFetch(input, init) {
     const url = new URL(input instanceof Request ? input.url : input);
     if (url.origin !== projectUrl || !url.pathname.startsWith('/auth/v1/')) {
       throw new Error('unsupported_auth_request');
@@ -13,7 +19,12 @@
     const headers = new Headers(init?.headers);
     headers.delete('apikey');
     if (headers.get('Authorization') === `Bearer ${authTransport}`) headers.delete('Authorization');
-    return fetch(`/api/auth?${query}`, { ...init, headers, cache: 'no-store', credentials: 'same-origin' });
+    if (query.get('authPath') === 'token' && query.get('grant_type') === 'password' && deviceClient.publicKeyHash) {
+      headers.set('X-Vault-Enrollment-Key', deviceClient.publicKeyHash);
+    }
+    const response = await fetch(`/api/auth?${query}`, { ...init, headers, cache: 'no-store', credentials: 'same-origin' });
+    if (query.get('grant_type') === 'password') deviceClient.rememberEnrollmentGrant(response.headers.get('x-vault-enrollment-grant'));
+    return response;
   }
   const form = document.querySelector('#login-form');
   const email = document.querySelector('#email');
@@ -55,21 +66,24 @@
   }
 
   async function apiRequest(session, path, { method = 'GET', body, signal } = {}) {
-    const response = await fetch(path, { method, signal, cache: 'no-store',
-      headers: { Authorization: `Bearer ${session.access_token}`,
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+    const response = await deviceClient.signedFetch(session, path, { method, body, signal });
     if (!response.ok) {
       const error = new Error('note_request_failed');
       error.status = response.status;
+      if (response.status === 403) {
+        let data; try { data = await response.json(); } catch {}
+        if (data?.code === 'device_not_approved') {
+          deviceClient.reset(); section.hidden = true; list.replaceChildren(); resetEditor();
+          deviceState.textContent = '기기 승인이 만료됐습니다. 로그아웃한 뒤 다시 로그인해 주세요.';
+        }
+      }
       throw error;
     }
     return response.json();
   }
 
   async function changeNote(operation) {
-    if (!currentSession || mutationBusy) return;
+    if (!currentSession || !deviceClient.approved || mutationBusy) return;
     const session = currentSession;
     const epoch = sessionEpoch;
     mutationBusy = true;
@@ -163,6 +177,7 @@
   }
 
   function renderSession(session) {
+    if (currentSession?.user?.id && currentSession.user.id !== session?.user?.id) deviceClient.reset();
     if (currentSession?.user?.id !== session?.user?.id || !session) {
       sessionEpoch++;
       resetEditor();
@@ -174,11 +189,45 @@
     list.replaceChildren();
     form.hidden = Boolean(session);
     logoutButton.hidden = !session;
-    section.hidden = !session;
-    state.textContent = session ? '로그인했습니다.' : '로그인이 필요합니다.';
+    section.hidden = !session || !deviceClient.approved;
+    devicePanel.hidden = !session;
+    approveButton.disabled = !session || deviceClient.approved;
+    deviceState.textContent = deviceClient.approved ? '서버가 이 접속 기기를 승인했습니다.' : '승인 전: 보호 자료를 표시하지 않습니다.';
+    state.textContent = session ? '로그인했습니다. 기기 승인 상태를 확인하세요.' : '로그인이 필요합니다.';
     password.value = '';
-    if (session) void loadNotes(session, version);
+    if (!session) deviceClient.reset();
+    if (session && deviceClient.approved) void loadNotes(session, version);
   }
+
+  approveButton.addEventListener('click', async () => {
+    if (!currentSession || approveButton.disabled) return;
+    const session = currentSession, epoch = sessionEpoch;
+    approveButton.disabled = true;
+    section.hidden = true;
+    list.replaceChildren();
+    deviceState.textContent = '서버에 승인을 요청하는 중입니다.';
+    try {
+      const status = await deviceClient.approve(session, () => {
+        deviceState.textContent = '승인 대기: 서버가 서명을 확인하는 중입니다.';
+      });
+      if (epoch !== sessionEpoch || currentSession?.user?.id !== session.user.id) return;
+      if (status.approved !== true || status.status !== 'approved') throw new Error('device_not_approved');
+      deviceState.textContent = '서버가 이 접속 기기를 승인했습니다.';
+      section.hidden = false;
+      void loadNotes(currentSession, ++requestVersion);
+    } catch {
+      if (epoch === sessionEpoch) {
+        deviceClient.reset(); section.hidden = true; list.replaceChildren();
+        deviceState.textContent = '기기 승인을 확인하지 못했습니다. 로그아웃한 뒤 이 기기에서 다시 로그인해 주세요.';
+      }
+    } finally { approveButton.disabled = deviceClient.approved || !currentSession; }
+  });
+
+  window.addEventListener('offline', () => {
+    deviceClient.reset(); ++requestVersion; pendingRequest?.abort();
+    section.hidden = true; list.replaceChildren(); resetEditor();
+    deviceState.textContent = '오프라인: 연결한 뒤 다시 로그인하고 승인을 요청하세요.';
+  });
 
   cancelEdit.addEventListener('click', resetEditor);
   noteForm.addEventListener('submit', event => {
@@ -201,7 +250,7 @@
 
   try {
     client = window.supabase.createClient(projectUrl, authTransport, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false },
       global: { fetch: authFetch },
     });
     // 콜백 안에서 다른 Auth 메서드를 기다리지 않습니다.
@@ -221,6 +270,7 @@
     setBusy(true);
     message.textContent = '';
     try {
+      await deviceClient.prepare();
       const { data, error } = await client.auth.signInWithPassword({
         email: email.value.trim(), password: password.value,
       });
@@ -239,6 +289,7 @@
     setBusy(true);
     message.textContent = '';
     try {
+      await deviceClient.close(currentSession).catch(() => {});
       const { error } = await client.auth.signOut({ scope: 'local' });
       if (error) message.textContent = errorReason(error);
       else {

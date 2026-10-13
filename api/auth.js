@@ -1,3 +1,4 @@
+import { issueEnrollmentGrant } from '../src/device-access.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 // 공개 키도 서버 함수에만 둡니다. 서버 전용 자료 키는 Auth 전달에 사용하지 않습니다.
@@ -61,6 +62,11 @@ export function createAuthHandler({ env = process.env, fetchImpl = fetch } = {})
       if (response.status === 204) return res.status(204).end();
       const data = await response.json();
       if (JSON.stringify(data).includes(publishableKey)) return fail(502, '인증 응답을 확인하지 못했습니다.');
+      if (config.step >= 11 && response.ok && path === 'token' && query.get('grant_type') === 'password'
+          && req.headers?.['x-vault-enrollment-key']) {
+        const grant = issueEnrollmentGrant(env.SUPABASE_SECRET_KEY, data.user?.id, req.headers['x-vault-enrollment-key']);
+        res.setHeader('X-Vault-Enrollment-Grant', grant);
+      }
       // SDK의 정상 세션·오류 응답만 전달하고 요청 본문·키·토큰을 기록하지 않습니다.
       return res.status(response.status).json(data);
     } catch { return fail(502, '인증 서버에 연결하지 못했습니다.'); }
