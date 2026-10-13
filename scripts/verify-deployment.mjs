@@ -1,4 +1,12 @@
-import { isDeepStrictEqual } from 'node:util';
+// Deployment metadata is JSON: compare object keys without depending on node:util.
+function equalJson(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object'
+      || Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length
+    && keys.every(key => Object.hasOwn(b, key) && equalJson(a[key], b[key]));
+}
 
 // 오류에는 필드 이름만 남깁니다. 응답 원문이나 실제 설정값은 출력하지 않습니다.
 export function assertDeploymentMetadata(identity, config, commit) {
@@ -15,7 +23,7 @@ export function assertDeploymentMetadata(identity, config, commit) {
     throw new Error('배포 식별 정보가 JSON 객체가 아닙니다.');
   }
   const mismatched = Object.keys(expected).filter(field =>
-    !isDeepStrictEqual(identity[field], expected[field]));
+    !equalJson(identity[field], expected[field]));
   if (mismatched.length) {
     throw new Error(`배포 식별 정보 불일치: ${mismatched.join(', ')}. 현재 커밋의 배포 완료를 확인해 주세요.`);
   }

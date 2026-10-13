@@ -37,16 +37,22 @@ function passingResponse(url) {
 test('strict self-checks preserve the submission schema when all actual responses pass', async () => {
   const previous = globalThis.fetch;
   try {
-    globalThis.fetch = async url => passingResponse(url);
+    globalThis.fetch = async (url, init = {}) => {
+      assert.ok(['GET', 'HEAD'].includes(init.method ?? 'GET'));
+      assert.equal(new URL(url).protocol, 'https:');
+      assert.equal(init.redirect, 'error');
+      return passingResponse(url);
+    };
     const attempts = await runAttackChecks(config, { requirePass: true });
     assert.equal(attempts.length, 20);
+    assert.equal(attempts.filter(item => item.observed === 'not_run').length, 11);
     const local = attempts.filter(attempt => attempt.attackId.startsWith('local_'));
     assert.equal(local.length, config.step >= 11 ? 1 : 3);
     assert.ok(attempts.some(x => x.attackId === 'single_note_restore_matches'));
     assert.ok(attempts.some(x => x.attackId === 'restore_preserves_other_records'));
     assert.ok(attempts.some(x => x.attackId === 'backup_verified'));
     assert.ok(attempts.some(x => x.attackId === 'post_restore_retest'));
-    assert.ok(local.every(attempt => attempt.observed.includes('로컬 가상 사건:') && attempt.observed.includes('실제')));
+    assert.ok(local.every(attempt => attempt.observed === 'not_run'));
     assert.ok(attempts.every(attempt =>
       Object.keys(attempt).sort().join(',') === 'attackId,expected,observed'));
     assert.equal(JSON.stringify(attempts).includes('sb_publishable_'), false);
@@ -56,8 +62,6 @@ test('strict self-checks preserve the submission schema when all actual response
 test('strict self-checks reject leaked static data, permitted app access and direct API regressions', async () => {
   const previous = globalThis.fetch;
   const regressions = [
-    { id: 'anonymous_note_create', match: url => url.pathname === '/api/restore',
-      response: () => Response.json({ restored: true }) },
     { id: 'static_note_seed_read', match: (url) => url.pathname === '/data.json',
       response: () => Response.json({ notes: [{}] }) },
     { id: 'anonymous_note_read', match: (url, init) => url.pathname === '/api/notes'
@@ -66,9 +70,6 @@ test('strict self-checks reject leaked static data, permitted app access and dir
     { id: 'anon_original_read', match: (url, init) => url.pathname === '/rest/v1/notes'
         && init.method === 'GET',
       response: () => Response.json([]) },
-    { id: 'anon_original_update', match: (url, init) => url.pathname === '/rest/v1/notes'
-        && init.method === 'PATCH',
-      response: () => new Response(null, { status: 204 }) },
     { id: 'anon_original_read', match: (url, init) => url.pathname === '/rest/v1/notes'
         && init.method === 'GET',
       // An invalid key is not evidence that table grants deny access.

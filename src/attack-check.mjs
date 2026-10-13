@@ -1,18 +1,11 @@
-import { checkOperations } from '../scripts/check-operations.mjs';
 import { readFileSync } from 'node:fs';
-import { decide } from './decider.mjs';
-import { detect } from './detect.mjs';
-import { checkDetection } from '../scripts/detect-test.mjs';
-import { fixtureRequests } from '../scripts/fixture-7.mjs';
-import { checkRecovery } from '../scripts/check-recovery.mjs';
-import { checkDeviceFlow } from '../scripts/check-device.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
   // 성공 여부는 응답에서 판정한 boolean으로만 결정합니다. 제출용 문구는 판정에 쓰지 않습니다.
   const finish = (attempts, passed) => {
     if (requirePass) {
-      const failed = attempts.filter((_, index) => passed[index] !== true);
+      const failed = attempts.filter((_, index) => passed[index] !== true && attempts[index].observed !== 'not_run');
       if (failed.length) throw new Error(`실제 배포 자기 점검 실패: ${failed.map(item => item.attackId).join(', ')}`);
     }
     return attempts;
@@ -56,6 +49,11 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       { attackId: 'anonymous_item_update', method: 'PUT', path: '/api/notes/00000000-0000-4000-8000-000000000000' },
       { attackId: 'anonymous_item_delete', method: 'DELETE', path: '/api/notes/00000000-0000-4000-8000-000000000000' },
     ]) {
+      if (!['GET', 'HEAD'].includes(check.method)) {
+        attempts.push({ attackId: check.attackId, expected: '유효한 로그인 없이 메모 접근 거부 (쓰기 요청은 격리 환경에서 미실행)', observed: 'not_run' });
+        passed.push(null);
+        continue;
+      }
       const api = await fetch(new URL(check.path ?? '/api/notes', app), {
         method: check.method, headers: check.headers, redirect: 'error',
         signal: AbortSignal.timeout(15000),
@@ -66,16 +64,6 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         denied = api.status === 401 && Object.keys(data).length === 1
           && typeof data.error === 'string';
       } catch { /* 오류 응답 원문은 제출하지 않습니다. */ }
-      if (config.step >= 10 && check.attackId === 'anonymous_note_create') {
-        const restore = await fetch(new URL(config.restoreRoute, app), {
-          method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000),
-        });
-        try {
-          const data = await restore.json();
-          denied &&= restore.status === 401 && Object.keys(data).length === 1
-            && typeof data.error === 'string';
-        } catch { denied = false; }
-      }
       attempts.push({ attackId: check.attackId, expected: '유효한 로그인 없이 메모 접근 거부',
         observed: denied ? (config.step >= 10 && check.attackId === 'anonymous_note_create'
           ? '메모 추가·복구 POST 모두 HTTP 401 JSON, 자료 없는 오류 응답 확인'
@@ -92,6 +80,11 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
       const publicKey = authServer.match(/const publishableKey = '(sb_publishable_[A-Za-z0-9_-]+)'/u)?.[1];
       if (!publicKey) throw new Error('공개 키를 확인할 수 없어 원본 API 점검을 중단했습니다.');
       for (const method of ['GET', 'PATCH']) {
+        if (method === 'PATCH') {
+          attempts.push({ attackId: 'anon_original_update', expected: '원본 직접 수정 거부 (격리 환경에서 쓰기 요청 미실행)', observed: 'not_run' });
+          passed.push(null);
+          continue;
+        }
         const url = new URL(config.originalApiUrl);
         // id는 NOT NULL인 기본키입니다. PATCH 조건은 어떤 기존 행에도 일치하지 않습니다.
         url.search = method === 'GET' ? 'select=id&limit=1' : 'id=is.null';
@@ -135,128 +128,24 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           : '화면 코드의 공개 키 제거 확인 실패' });
       passed.push(noClientKey);
     }
-    const localStart = attempts.length;
-    if (config.step >= 6) {
-      const { normal } = fixtureRequests();
-      const deviceResults = [];
-      for (const check of [
-        { attackId: 'local_registered_device_read', flag: true, decision: 'allow', reason: 'approved' },
-        { attackId: 'local_unregistered_device_read', flag: false, decision: 'deny', reason: 'device_not_registered' },
-        { attackId: 'local_missing_device_registration', flag: undefined, decision: 'deny', reason: 'device_not_registered' },
-      ]) {
-        const request = { ...normal, deviceRegistered: check.flag };
-        if (check.flag === undefined) delete request.deviceRegistered;
-        const result = await decide(request);
-        const valid = result.decision === check.decision && result.reasonCode === check.reason;
-        const attempt = { attackId: check.attackId,
-          expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
-          observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 mTLS·심판 시험 아님`
-            : '로컬 기기 조건 확인 실패' };
-        if (config.step >= 10) deviceResults.push(valid);
-        else { attempts.push(attempt); passed.push(valid); }
-      }
-      if (config.step >= 10) {
-        const valid = deviceResults.length === 3 && deviceResults.every(Boolean);
-        attempts.push({ attackId: 'local_device_registration_checks',
-          expected: '로컬 가상 사건: 등록 allow, 미등록·누락 deny/device_not_registered',
-          observed: valid ? '로컬 가상 사건: 기기 조건 3건 모두 통과; 실제 mTLS·심판 시험 아님'
-            : '로컬 기기 조건 확인 실패' });
-        passed.push(valid);
-      }
-    }
-    if (config.step >= 7) {
-      const { suspicious } = fixtureRequests();
-      const riskResults = [];
-      for (const check of [
-        { attackId: 'local_compound_risk_step_up', request: suspicious, decision: 'step_up', reason: 'step_up_required' },
-        { attackId: 'local_verified_compound_risk', request: { ...suspicious,
-          stepUp: { verified: true, authAgeSeconds: 60 } }, decision: 'allow', reason: 'approved' },
-        { attackId: 'local_expired_step_up', request: { ...suspicious,
-          stepUp: { verified: true, authAgeSeconds: 901 } }, decision: 'step_up', reason: 'step_up_required' },
-      ]) {
-        const result = await decide(check.request);
-        const valid = result.decision === check.decision && result.reasonCode === check.reason;
-        const attempt = { attackId: check.attackId, expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
-          observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 재로그인 실측 아님`
-            : '로컬 추가 확인 규칙 확인 실패' };
-        if (config.step >= 10) riskResults.push(valid);
-        else { attempts.push(attempt); passed.push(valid); }
-      }
-      if (config.step >= 10) {
-        const valid = riskResults.length === 3 && riskResults.every(Boolean);
-        attempts.push({ attackId: 'local_step_up_checks',
-          expected: '로컬 가상 사건: 복합 이상 step_up, 새 확인 allow, 만료 확인 step_up',
-          observed: valid ? '로컬 가상 사건: 추가 확인 3건 모두 통과; 실제 재로그인 실측 아님'
-            : '로컬 추가 확인 규칙 확인 실패' });
-        passed.push(valid);
-      }
-    }
-    if (config.step >= 8) {
-      const { normal } = fixtureRequests();
-      const id = '11111111-1111-4111-8111-111111111111';
-      const checks = [
-        ...['GET','PUT','DELETE'].map(method => ({ service: 'notes', method,
-          path: `/notes/${id}`, route: `${method} /notes/:id`, decision: 'allow' })),
-        { service: 'notes', method: 'POST', path: '/notes', route: 'POST /notes', decision: 'allow' },
-        { service: 'notes', method: 'GET', path: '/notes', route: 'GET /notes', decision: 'deny' },
-        ...['POST','PUT','PATCH','DELETE'].map(method => ({ service: 'notices', method,
-          path: `/notices/${id}`, route: `${method} /notices/:id`, decision: 'deny' })),
-        { service: 'notes', method: 'GET', path: '/notes/export', route: 'GET /notes/:id', decision: 'deny' },
-      ];
-      let valid = true;
-      for (const check of checks) {
-        const { decision, ...input } = check;
-        valid &&= (await decide({ ...normal, ...input })).decision === decision;
-      }
-      if (config.step >= 9) {
-        const detections = await checkDetection(detect);
-        valid &&= detections.every(item => item.passed);
-      }
-      attempts.push({ attackId: config.step >= 9 ? 'local_zone_and_detection_rules' : 'local_resource_zone_rules',
-        expected: config.step >= 9
-          ? '로컬 가상 사건: 기존 구역 제한 유지, 탐지 연습과 복합 기기 사건의 회수 제안 검사'
-          : '로컬 가상 사건: 메모 한 건 CRUD/추가 allow, 전체 목록·공지 쓰기·기능 경로 deny',
-        observed: valid ? config.step >= 9
-          ? '로컬 가상 사건: 구역 제한과 탐지 연습 12건 통과; 복합 기기 사건만 대상 1개 제안, 정상 기기는 observe; 실제 접속 회수·경과 시간은 미검증'
-          : '로컬 가상 사건: 정상 메모 경로 allow, 전체 목록·공지 쓰기·export deny; 실제 심판 시험 아님, 소유자 비교는 API 시험으로 별도 확인'
-          : '로컬 자원 구역 규칙 확인 실패' });
-      passed.push(valid);
+    // API-handler integration uses npm packages/WebCrypto and writes synthetic state.
+    // Run it separately with ops:check/recovery:check/device:check, never in the bundle sandbox.
+    const skipped = [
+      ...(config.step >= 6 ? [['local_existing_device_risk_zone_detection', '기기·위험·구역·탐지 통합 시험은 별도 실행']] : []),
+      ...(config.step >= 10 ? [
+        ['backup_verified', '사본 재검증은 recovery:check에서 별도 실행'],
+        ['post_restore_retest', '복원 뒤 정상·금지 요청 재시험은 별도 실행'],
+        ['single_note_restore_matches', '한 건 복구 쓰기 시험은 격리 환경에서 미실행'],
+        ['restore_preserves_other_records', '복구 후 다른 자료 보존 시험은 별도 실행'],
+      ] : []),
+      ...(config.step >= 11 ? [['app_approval_and_request_signatures', '승인·서명·변조 시험은 device:check에서 별도 실행']] : []),
+    ];
+    for (const [attackId, expected] of skipped) {
+      attempts.push({ attackId, expected, observed: 'not_run' });
+      passed.push(null);
     }
     if (config.step >= 11) {
-      const local = attempts.splice(localStart), results = passed.splice(localStart);
-      const valid = local.length === 3 && results.length === 3 && results.every(Boolean);
-      attempts.push({ attackId: 'local_existing_device_risk_zone_detection',
-        expected: '로컬 가상 사건: 이전 기기 3건·추가 확인 3건·구역 제한·탐지 규칙 보존',
-        observed: valid ? '로컬 가상 사건: 기존 기기·위험·구역·탐지 시험 모두 통과; 실제 운영 엔진 실측 아님'
-          : '이전 규칙 보존 확인 실패' });
-      passed.push(valid);
-    }
-    if (config.step >= 10) {
-      const recovery = await checkRecovery();
-      attempts.push({ attackId: 'backup_verified',
-        expected: '검증한 사본 재읽기·해시/버전 대조, 누락·검증 실패 시 복원 중단, 실행 전 변경 미리보기',
-        observed: `로컬 가상 사건: 사본 검증 ${recovery.checks.length}건 실제 실행, backupVerified=${recovery.backupVerified}; 실제 운영 정책 변경 없음` });
-      passed.push(recovery.backupVerified === true);
-      attempts.push({ attackId: 'post_restore_retest',
-        expected: '시험 사본 복원 직후 정상·금지 요청을 재실행하고 미실행은 구분',
-        observed: `로컬 가상 사건: 복원 뒤 재시험 ${recovery.retests.length}건 실제 실행, retestPassed=${recovery.retestPassed}; 실제 브라우저·운영 회수는 미실행` });
-      passed.push(recovery.retestPassed === true);
-      attempts.push({ attackId: 'single_note_restore_matches',
-        expected: '시험 B 한 건의 변조·삭제 뒤 복구 API를 호출해 ID·소유자·내용 해시가 사본과 일치',
-        observed: `로컬 가상 사건: 실제 복구 핸들러를 거쳐 두 경우의 ID·소유자·내용 해시 각각 대조, restoreMatched=${recovery.restoreMatched}; 운영 심판 시험 아님` });
-      passed.push(recovery.restoreMatched === true);
-      attempts.push({ attackId: 'restore_preserves_other_records',
-        expected: '대상 한 건 외의 메모와 기존 감사 기록 보존',
-        observed: `로컬 가상 사건: 변조·삭제 복원 후 다른 메모·기존 감사 대조, preservationPassed=${recovery.preservationPassed}; 실제 사용자 자료 변경 없음` });
-      passed.push(recovery.preservationPassed === true);
-    }
-    if (config.step >= 11) {
-      const device = await checkDeviceFlow();
-      attempts.push({ attackId: 'app_approval_and_request_signatures',
-        expected: '서버 승인 전 자료 없음, 승인 후 정상 CRUD, 무서명·경로/본문 변조·다른 사용자·재전송 거부',
-        observed: `로컬 가상 사건: 실제 WebCrypto 클라이언트와 서버 핸들러 ${device.checks.length}건 실행, passed=${device.passed}; 운영 심판 시험 아님` });
-      passed.push(device.passed === true);
-      const manifest = await fetch(new URL('/manifest.webmanifest',app), {signal:AbortSignal.timeout(15000)});
+      const manifest = await fetch(new URL('/manifest.webmanifest',app), {redirect:'error',signal:AbortSignal.timeout(15000)});
       let installable = false;
       try {
         const data = await manifest.json();
@@ -265,14 +154,14 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         for (const icon of data.icons ?? []) {
           const url = new URL(icon.src,app);
           if(url.origin !== app.origin){installable=false;break;}
-          const response = await fetch(url,{signal:AbortSignal.timeout(15000)});
+          const response = await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});
           const bytes = new Uint8Array(await response.arrayBuffer());
           installable &&= response.ok && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
         }
       } catch { installable = false; }
-      const worker = await fetch(new URL('/sw.js',app),{signal:AbortSignal.timeout(15000)});
+      const worker = await fetch(new URL('/sw.js',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
       const source = await worker.text();
-      const offline = await fetch(new URL('/offline.html',app),{signal:AbortSignal.timeout(15000)});
+      const offline = await fetch(new URL('/offline.html',app),{redirect:'error',signal:AbortSignal.timeout(15000)});
       installable &&= worker.ok && source.includes("url.pathname.startsWith('/api/')")
         && source.includes('/offline.html') && !source.includes('cache.put') && offline.ok;
       attempts.push({attackId:'installable_public_offline_shell',
@@ -281,19 +170,18 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           :'설치형 앱 공개 파일 확인 실패'});
       passed.push(installable);
       if(config.step>=12){
-        const integrated=await checkOperations();
-        const response=await fetch(new URL('/api/operations',app),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+        const response=await fetch(new URL('/api/operations',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
         const metadata=await response.json();
-        const evidence=await fetch(new URL('/operations-verification.json',app),{cache:'no-store',signal:AbortSignal.timeout(15000)});
+        const evidence=await fetch(new URL('/operations-verification.json',app),{redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
         const report=await evidence.json();
-        const valid=integrated.passed&&response.status===200&&response.headers.has('x-vault-request-id')
+        const valid=response.status===200&&response.headers.has('x-vault-request-id')
           &&Number.isFinite(Date.parse(response.headers.get('x-vault-checked-at')))
           &&metadata.step===12&&metadata.engine?.name==='ALEPH SDP 엔진'
           &&metadata.officialAttacks?.verified===0&&metadata.officialAttacks?.status==='unexecuted'
           &&evidence.ok&&report.commit===metadata.commit&&report.passed===true;
         attempts[attempts.length-1]={attackId:'operations_evidence_and_installable_app',
           expected:'설치형 앱 유지, 작전실 API·서버 요청 근거·가상 통합 시험·공식 41종 미실행 구분',
-          observed:valid&&installable?'실제 작전실 API HTTP 200와 서버 요청 ID/시각, 설치 파일 확인; 가상 통합 27건 통과; 공식 41종 미확인'
+          observed:valid&&installable?'실제 작전실 API HTTP 200와 서버 요청 ID/시각, 설치 파일 확인; 배포 가상 시험 보고서 조회(현재 명령에서 재실행 아님); 공식 41종 미확인'
             :'작전실 또는 설치형 앱 근거 확인 실패'};
         passed[passed.length-1]=valid&&installable;
       }

@@ -186,22 +186,19 @@ test('authenticated stages self-check records actual rejection requests without 
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, config.step >= 12 ? 21 : config.step >= 11 ? 19 : config.step >= 10 ? 14 : 13);
-    if (config.step >= 10) assert.equal(calls.find(call => call.path === config.restoreRoute).options.method, 'POST');
-    assert.equal(calls.find(call => call.path === '/api/notes' && call.options.method === 'POST').options.method, 'POST');
-    assert.ok(checks.slice(1, 9).every(check => check.observed.includes('HTTP 401')));
+    assert.ok(calls.every(call => ['GET', 'HEAD'].includes(call.options.method ?? 'GET')));
+    assert.ok(!calls.some(call => call.path === config.restoreRoute));
+    assert.ok(checks.slice(1, 9).every(check => check.observed === 'not_run' || check.observed.includes('HTTP 401')));
     assert.equal(JSON.stringify(checks).includes('Bearer'), false);
     assert.equal(JSON.stringify(checks).includes('sb_publishable_'), false);
     assert.ok(calls.filter(call => call.path === '/rest/v1/notes').every(call => call.options.headers.apikey.startsWith('sb_publishable_')
       && !call.options.headers.Authorization));
-    assert.equal(calls.find(call => call.path === '/rest/v1/notes' && call.options.method === 'PATCH').options.method, 'PATCH');
-    assert.equal(calls.find(call => call.path === '/rest/v1/notes' && call.options.method === 'PATCH').search, '?id=is.null');
     globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
     const failed = await runAttackChecks(config);
-    assert.ok(failed.filter(check => !check.attackId.startsWith('local_')
+    assert.ok(failed.filter(check => check.observed !== 'not_run' && !check.attackId.startsWith('local_')
       && !['backup_verified', 'post_restore_retest', 'single_note_restore_matches', 'restore_preserves_other_records', 'app_approval_and_request_signatures', 'installable_public_offline_shell'].includes(check.attackId)).every(check => check.observed.includes('확인 실패')));
-    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, config.step >= 11 ? 1 : config.step >= 10 ? 3 : 7);
-    assert.ok(failed.filter(check => check.attackId.startsWith('local_')).every(check => check.observed.includes('로컬 가상 사건:')));
+    assert.equal(failed.filter(check => check.attackId.startsWith('local_')).length, 1);
+    assert.ok(failed.filter(check => check.attackId.startsWith('local_')).every(check => check.observed === 'not_run'));
   } finally { globalThis.fetch = original; }
 });
 
