@@ -1,6 +1,6 @@
 // Only the class engine may call this policy after authenticating identity, device and route.
 // Do not expose this as an API accepting browser-supplied deviceRegistered or subjectId.
-export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required']);
+export const RULE_IDS = Object.freeze(['starter.deny', 'device_registered', 'step_up_required', 'resource_zones']);
 
 // Only engine-delivered fields are inspected. Missing values stay missing; headers are never read.
 function connectionContext(request) {
@@ -44,24 +44,37 @@ export async function decide(request) {
   }
   const identityPresent = typeof request.subjectId === 'string' && request.subjectId.trim().length > 0;
   const devicePresent = typeof request.deviceId === 'string' && /^[a-f0-9]{16}$/u.test(request.deviceId);
-  const readRoute = ['/notes', '/api/notes'].some(base =>
-    (request.route === `GET ${base}` && request.path === base)
-    || (request.route === `GET ${base}/:id` && typeof request.path === 'string'
-      && request.path.startsWith(`${base}/`)
-      && /^[A-Za-z0-9_-]+$/u.test(request.path.slice(base.length + 1))));
+  // Route is an engine-confirmed method/template pair, never a prefix or browser selector.
+  // The contract's IDs are opaque (the supplied fixture uses "demo"); reserved action names are not IDs.
+  const zoneRoute = ['notes', 'notices'].some(resource => {
+    if (request.service !== resource) return false;
+    return [`/${resource}`, `/api/${resource}`].some(base => {
+      const list = request.path === base && request.route === `${request.method} ${base}`;
+      const item = typeof request.path === 'string' && request.path.startsWith(`${base}/`)
+        && /^[A-Za-z0-9_-]+$/u.test(request.path.slice(base.length + 1))
+        && !['export', 'import', 'search', 'bulk', 'admin'].includes(request.path.slice(base.length + 1).toLowerCase())
+        && request.route === `${request.method} ${base}/:id`;
+      // No teacher/ownership assertion exists in this contract. Notices mutations fail closed here.
+      // A notes allow is only the route gate: the final API must atomically constrain owner_id.
+      return resource === 'notes'
+        ? list && ['GET', 'POST'].includes(request.method) || item && ['GET', 'PUT', 'DELETE'].includes(request.method)
+        : request.method === 'GET' && (list || item);
+    });
+  });
   const context = connectionContext(request);
   if (!context) return reply('deny', 'starter_not_ready', 'starter.deny');
+  if (!zoneRoute || request.queryLength !== 0) return reply('deny', 'starter_not_ready', 'resource_zones');
   // Registration always wins over step-up. Only the trusted engine can attest a fresh same-identity login.
   // A fixture simulates that attestation; this module never creates it from a token or client header.
   if (request.schema === 'aleph.decision.v1' && identityPresent && devicePresent
-      && request.service === 'notes' && context.source === 'judge_fixture' && context.riskCount >= 2
+      && ['notes', 'notices'].includes(request.service) && context.source === 'judge_fixture' && context.riskCount >= 2
       && !recentlyVerified(request.stepUp)) {
     return reply('step_up', 'step_up_required', 'step_up_required');
   }
   if (request.schema === 'aleph.decision.v1' && identityPresent && devicePresent
-      && request.service === 'notes' && request.method === 'GET' && readRoute) {
-    return reply('allow', 'approved', 'device_registered');
+      && zoneRoute && request.queryLength === 0) {
+    return reply('allow', 'approved', 'resource_zones');
   }
-  // Preserve the starter's default denial outside the single implemented read rule.
+  // Unknown resource, method, path, query or absent authority stays denied.
   return reply('deny', 'starter_not_ready', 'starter.deny');
 }

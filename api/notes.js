@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { createLoginVerifier } from '../src/verify-login.mjs';
+import { apiResourcePath, RESOURCE_IDS, UUID } from '../src/resources.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 // 기존 로그인 검증 도우미를 그대로 사용하고 모든 자료 요청에 소유자 조건을 적용합니다.
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const publicNote = ({ id, title, content }) => ({ id, title, body: content });
 
 export function createNotesHandler({ clientFactory = createClient, env = process.env, itemRoute = false } = {}) {
@@ -12,6 +12,7 @@ export function createNotesHandler({ clientFactory = createClient, env = process
   return async function notes(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Vary', 'Authorization');
+    res.setHeader('X-Resource-Id', RESOURCE_IDS.notes);
     const authorization = req.headers?.authorization;
     if (typeof authorization !== 'string' || !authorization) {
       return res.status(401).json({ error: '유효한 로그인이 필요합니다.' });
@@ -41,14 +42,9 @@ export function createNotesHandler({ clientFactory = createClient, env = process
         res.setHeader('Allow', methods.join(', '));
         return res.status(405).json({ error: '허용되지 않은 요청입니다.' });
       }
-      let id;
-      if (itemRoute) {
-        id = req.query?.id ?? new URL(req.url, config.publicAppUrl).pathname.split('/').at(-1);
-        if (typeof id !== 'string' || !UUID.test(id)) {
-          return res.status(400).json({ error: '메모 ID는 UUID여야 합니다.' });
-        }
-        id = id.toLowerCase();
-      }
+      const target = apiResourcePath(req, 'notes', itemRoute);
+      if (!target) return res.status(400).json({ error: '허용되지 않은 자료 경로입니다.' });
+      let id = target.id;
       let input;
       if (['POST', 'PUT'].includes(req.method)) {
         try { input = typeof req.body === 'string' ? JSON.parse(req.body) : req.body; }

@@ -12,7 +12,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -40,6 +40,10 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         : `정적 자료 제거 확인 실패 (HTTP ${response.status})` }];
     const passed = [empty];
     for (const check of [
+      ...(config.step >= 8 ? [
+        { attackId: 'anonymous_notice_list', method: 'GET', path: '/api/notices' },
+        { attackId: 'anonymous_notice_update', method: 'PUT', path: '/api/notices/00000000-0000-4000-8000-000000000000' },
+      ] : []),
       { attackId: 'anonymous_note_read', method: 'GET' },
       { attackId: 'anonymous_note_create', method: 'POST' },
       { attackId: 'malformed_login_token', method: 'GET', headers: { Authorization: 'Bearer invalid' } },
@@ -132,7 +136,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         passed.push(valid);
       }
     }
-    if (config.step === 7) {
+    if (config.step >= 7) {
       const { suspicious } = fixtureRequests();
       for (const check of [
         { attackId: 'local_compound_risk_step_up', request: suspicious, decision: 'step_up', reason: 'step_up_required' },

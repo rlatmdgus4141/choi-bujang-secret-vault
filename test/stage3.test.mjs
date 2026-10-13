@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { generateKeyPair, SignJWT, jwtVerify, createLocalJWKSet, exportJWK } from 'jose';
+import { createNoticesHandler } from '../api/notices.js';
 import { createNotesHandler } from '../api/notes.js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { deploymentIdentity } from '../scripts/deployment-identity.mjs';
@@ -159,7 +160,7 @@ test('current deployment identity and unchanged starter verifier', async () => {
   const identity = deploymentIdentity({ VERCEL_GIT_PROVIDER: 'github',
     VERCEL_GIT_REPO_OWNER: 'fixture', VERCEL_GIT_REPO_SLUG: 'vault',
     VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40), VERCEL_URL: 'fixture.vercel.app' }, config);
-  assert.equal(identity.step, 7);
+  assert.equal(identity.step, 8);
   assert.equal(identity.originalApiUrl, config.originalApiUrl);
   assert.deepEqual(identity.allowedRoutes, config.allowedRoutes);
   const source = await readFile(new URL('../src/verify-login.mjs', import.meta.url));
@@ -181,15 +182,15 @@ test('authenticated stages self-check records actual rejection requests without 
         : Response.json({ error: 'login required' }, { status: 401 });
     };
     const checks = await runAttackChecks(config);
-    assert.equal(calls.length, 11);
-    assert.equal(calls[2].options.method, 'POST');
+    assert.equal(calls.length, 13);
+    assert.equal(calls.find(call => call.path === '/api/notes' && call.options.method === 'POST').options.method, 'POST');
     assert.ok(checks.slice(1, 9).every(check => check.observed.includes('HTTP 401')));
     assert.equal(JSON.stringify(checks).includes('Bearer'), false);
     assert.equal(JSON.stringify(checks).includes('sb_publishable_'), false);
-    assert.ok(calls.slice(7, 9).every(call => call.options.headers.apikey.startsWith('sb_publishable_')
+    assert.ok(calls.filter(call => call.path === '/rest/v1/notes').every(call => call.options.headers.apikey.startsWith('sb_publishable_')
       && !call.options.headers.Authorization));
-    assert.equal(calls[8].options.method, 'PATCH');
-    assert.equal(calls[8].search, '?id=is.null');
+    assert.equal(calls.find(call => call.path === '/rest/v1/notes' && call.options.method === 'PATCH').options.method, 'PATCH');
+    assert.equal(calls.find(call => call.path === '/rest/v1/notes' && call.options.method === 'PATCH').search, '?id=is.null');
     globalThis.fetch = async () => Response.json({ notes: ['fixture'] });
     const failed = await runAttackChecks(config);
     assert.ok(failed.filter(check => !check.attackId.startsWith('local_')).every(check => check.observed.includes('확인 실패')));
@@ -198,10 +199,14 @@ test('authenticated stages self-check records actual rejection requests without 
   } finally { globalThis.fetch = original; }
 });
 
-function crudFixture() {
+function crudFixture({ notices = false, authority = {} } = {}) {
   const rows = new Map();
   const clientFactory = () => ({
-    auth: { async getClaims(value) {
+    auth: { admin: { async getUserById(id) {
+      if (authority.fail) return { error: new Error('unavailable') };
+      return { data: { user: { id: authority.wrongUser ? 'wrong' : id,
+        app_metadata: { vault_role: authority.role }, user_metadata: { vault_role: 'instructor' } } } };
+    } }, async getClaims(value) {
       try { return { data: { claims: (await jwtVerify(value, pair.publicKey)).payload }, error: null }; }
       catch { return { data: null, error: new Error('invalid fixture') }; }
     } },
@@ -234,11 +239,12 @@ function crudFixture() {
       return builder;
     },
   });
-  const root = createNotesHandler({ env, clientFactory });
-  const item = createNotesHandler({ env, clientFactory, itemRoute: true });
+  const factory = notices ? createNoticesHandler : createNotesHandler;
+  const root = factory({ env, clientFactory });
+  const item = factory({ env, clientFactory, itemRoute: true });
   return { rows, async call(method, bearer, body, id, extras = {}) {
     const res = response();
-    await (id === undefined ? root : item)({ method, headers: { authorization: bearer, ...extras.headers }, body,
+    await (id === undefined ? root : item)({ method, url: extras.url, headers: { authorization: bearer, ...extras.headers }, body,
       query: { ...(id === undefined ? {} : { id }), ...extras.query } }, res);
     return res;
   } };
@@ -368,4 +374,66 @@ test('student cannot access judge-owned or ownerless rows; missing ownership nev
     assert.equal(rows.get(id).title, 'restricted fixture');
   }
   assert.equal(rows.size, 2);
+});
+
+
+test('stage 8 final API rejects path/query resource switches and never overrides the path ID', async () => {
+  const { call, rows } = crudFixture();
+  const bearer = `Bearer ${await token()}`;
+  const created = await call('POST', bearer, { title: 'fixture', body: 'test-only' });
+  const id = created.body.id;
+  for (const url of [`/api/notices/${id}`, `/api/notes/${id}?action=export`,
+    `/api/notes/${id}?role=instructor`, `/api/notes/${id}?id=other`, `/api/notes/export`,
+    `/api/notes/../notes/${id}`, `/api/notes/%2e%2e/${id}`]) {
+    assert.equal((await call('GET', bearer, undefined, id, { url })).statusCode, 400);
+  }
+  assert.equal((await call('GET', bearer, undefined, undefined,
+    { url: '/api/notes?owner_id=other' })).statusCode, 400);
+  assert.equal((await call('GET', bearer, undefined, id,
+    { url: `/api/notes/${id}?id=${id}` })).statusCode, 200);
+  assert.equal((await call('GET', bearer, undefined, id,
+    { url: `/api/notes/${id}` })).headers['X-Resource-Id'], 'notes.personal');
+  assert.equal(rows.size, 1);
+});
+
+test('stage 8 students cannot mutate instructor notices even with forged role metadata', async () => {
+  const { call, rows } = crudFixture({ notices: true });
+  const bearer = `Bearer ${await token({ app_metadata: { vault_role: 'instructor' } })}`;
+  const id = '77777777-7777-4777-8777-777777777777';
+  rows.set(id, { id, title: 'notice fixture', content: 'test-only' });
+  const input = { title: 'tampered', body: '', role: 'instructor', owner_id: userId };
+  assert.equal((await call('POST', bearer, input)).statusCode, 403);
+  const denied = await call('PUT', bearer, input, id, { headers: { 'x-role': 'instructor' } });
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(denied.body, { error: 'instructor_required' });
+  assert.equal(rows.get(id).title, 'notice fixture');
+  const read = await call('GET', bearer, undefined, id);
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.headers['X-Resource-Id'], 'notices.instructor');
+  for (const method of ['GET', 'POST', 'PUT']) {
+    assert.equal((await call(method, undefined, input, method === 'PUT' ? id : undefined)).statusCode, 401);
+  }
+});
+
+test('stage 8 current server-stored instructor authority allows notice updates, revocation and lookup errors fail closed', async () => {
+  const authority = { role: 'instructor' };
+  const { call, rows } = crudFixture({ notices: true, authority });
+  const bearer = `Bearer ${await token()}`;
+  const created = await call('POST', bearer, { title: 'notice fixture', body: 'test-only' });
+  assert.equal(created.statusCode, 201);
+  const id = created.body.id;
+  assert.equal(rows.get(id).updated_by, userId);
+  const edited = await call('PUT', bearer, { title: 'updated', body: 'changed' }, id);
+  assert.equal(edited.statusCode, 200);
+  assert.deepEqual(edited.body, { id, title: 'updated', body: 'changed' });
+  assert.equal((await call('GET', bearer)).body.length, 1);
+  assert.equal((await call('PUT', bearer, { title: 'x', body: '' },
+    '88888888-8888-4888-8888-888888888888')).statusCode, 404);
+  authority.role = 'student';
+  assert.equal((await call('PUT', bearer, { title: 'bad', body: '' }, id)).statusCode, 403);
+  authority.role = 'instructor'; authority.wrongUser = true;
+  assert.equal((await call('PUT', bearer, { title: 'bad', body: '' }, id)).statusCode, 403);
+  authority.fail = true;
+  assert.equal((await call('PUT', bearer, { title: 'bad', body: '' }, id)).statusCode, 503);
+  assert.equal(rows.get(id).title, 'updated');
 });

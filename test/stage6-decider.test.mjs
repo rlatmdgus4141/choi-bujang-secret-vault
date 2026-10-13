@@ -10,7 +10,7 @@ test('stage 6 allows only registered note reads and preserves the five-field res
     for (const [route, path] of [[`GET ${base}`, base], [`GET ${base}/:id`, `${base}/demo`]]) {
       const out = await decide({ ...normal, route, path });
       assert.deepEqual(out, { schema: 'aleph.decision.v1', requestId: normal.requestId,
-        decision: 'allow', reasonCode: 'approved', ruleIds: ['device_registered'] });
+        decision: 'allow', reasonCode: 'approved', ruleIds: ['resource_zones'] });
     }
   }
   assert.equal(JSON.stringify(normal), before);

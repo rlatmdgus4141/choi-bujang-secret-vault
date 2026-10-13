@@ -31,7 +31,7 @@ test('strict self-checks preserve the submission schema when all actual response
   try {
     globalThis.fetch = async url => passingResponse(url);
     const attempts = await runAttackChecks(config, { requirePass: true });
-    assert.equal(attempts.length, 17);
+    assert.equal(attempts.length, 19);
     const local = attempts.filter(attempt => attempt.attackId.startsWith('local_'));
     assert.equal(local.length, 6);
     assert.ok(local.every(attempt => attempt.observed.includes('로컬 가상 사건:') && attempt.observed.includes('실제')));
