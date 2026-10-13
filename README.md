@@ -1,5 +1,18 @@
 # 7단계 저장점 · 보너스 모듈 보존
 
+## 8단계 저장점 · 판정기 자원 구역
+
+7단계는 사용자 제출 결과 90점으로 통과했습니다.
+현재 「8단계 저장점」에는 Production defense-r5와 동일한 resource_zones 판정기와 회귀 시험을 반영했습니다.
+기존 XDR01/02와 main 시작 틀 화면은 보존합니다. 실제 메모·공지 API와 step 8 배포 설정은 defense-r5에 있습니다.
+정확한 notes/notices 서비스·경로·메서드를 구별하고, 미등록 기기 및 복합 이상 접속 규칙은 유지합니다.
+계약에는 소유자/강사 역할이 없으므로 최종 Production API에서 저장된 소유자·강사 권한을 확인합니다.
+엔진의 공지 변경은 역할 계약이 없어 기본 거부합니다. 실제 엔진 강사 수정은 미실행입니다.
+상세 범위: [docs/STAGE8_VERIFICATION.md](docs/STAGE8_VERIFICATION.md).
+확인: `node --test test/stage6-decider.test.mjs test/stage7-decider.test.mjs test/stage8-decider.test.mjs` 및 `npm run decider:test`.
+공식 가상 시험과 로컬 시험은 실제 심판 판정이 아닙니다.
+
+
 ## 7단계 저장점 · 복합 이상 접속의 추가 확인
 
 6단계는 사용자 재제출 결과 90점으로 통과했습니다(2026-10-13).
