@@ -12,3 +12,4 @@ public/vendor/
 recovery/*.log
 recovery/*.lock
 recovery/*.tmp
+public/recovery-verification.json

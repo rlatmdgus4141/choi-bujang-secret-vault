@@ -3,7 +3,7 @@ import { decide } from './decider.mjs';
 import { detect } from './detect.mjs';
 import { checkDetection } from '../scripts/detect-test.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
-import { previewPolicy } from './recovery-policy.mjs';
+import { checkRecovery } from '../scripts/check-recovery.mjs';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config, { requirePass = false } = {}) {
@@ -135,6 +135,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     if (config.step >= 6) {
       const { normal } = fixtureRequests();
+      const deviceResults = [];
       for (const check of [
         { attackId: 'local_registered_device_read', flag: true, decision: 'allow', reason: 'approved' },
         { attackId: 'local_unregistered_device_read', flag: false, decision: 'deny', reason: 'device_not_registered' },
@@ -144,9 +145,18 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         if (check.flag === undefined) delete request.deviceRegistered;
         const result = await decide(request);
         const valid = result.decision === check.decision && result.reasonCode === check.reason;
-        attempts.push({ attackId: check.attackId,
+        const attempt = { attackId: check.attackId,
           expected: `로컬 가상 사건: ${check.decision} / ${check.reason}`,
           observed: valid ? `로컬 가상 사건: ${result.decision} / ${result.reasonCode}; 실제 mTLS·심판 시험 아님`
+            : '로컬 기기 조건 확인 실패' };
+        if (config.step >= 10) deviceResults.push(valid);
+        else { attempts.push(attempt); passed.push(valid); }
+      }
+      if (config.step >= 10) {
+        const valid = deviceResults.length === 3 && deviceResults.every(Boolean);
+        attempts.push({ attackId: 'local_device_registration_checks',
+          expected: '로컬 가상 사건: 등록 allow, 미등록·누락 deny/device_not_registered',
+          observed: valid ? '로컬 가상 사건: 기기 조건 3건 모두 통과; 실제 mTLS·심판 시험 아님'
             : '로컬 기기 조건 확인 실패' });
         passed.push(valid);
       }
@@ -189,10 +199,6 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
         const detections = await checkDetection(detect);
         valid &&= detections.every(item => item.passed);
       }
-      if (config.step >= 10) {
-        const plan = await previewPolicy(new URL('..', import.meta.url).pathname);
-        valid &&= plan.changes.length === 0 && plan.productionChanged === false;
-      }
       attempts.push({ attackId: config.step >= 9 ? 'local_zone_and_detection_rules' : 'local_resource_zone_rules',
         expected: config.step >= 9
           ? '로컬 가상 사건: 기존 구역 제한 유지, 탐지 연습과 복합 기기 사건의 회수 제안 검사'
@@ -202,6 +208,17 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
           : '로컬 가상 사건: 정상 메모 경로 allow, 전체 목록·공지 쓰기·export deny; 실제 심판 시험 아님, 소유자 비교는 API 시험으로 별도 확인'
           : '로컬 자원 구역 규칙 확인 실패' });
       passed.push(valid);
+    }
+    if (config.step >= 10) {
+      const recovery = await checkRecovery();
+      attempts.push({ attackId: 'backup_verified',
+        expected: '검증한 사본 재읽기·해시/버전 대조, 누락·검증 실패 시 복원 중단, 실행 전 변경 미리보기',
+        observed: `로컬 가상 사건: 사본 검증 ${recovery.checks.length}건 실제 실행, backupVerified=${recovery.backupVerified}; 실제 운영 정책 변경 없음` });
+      passed.push(recovery.backupVerified === true);
+      attempts.push({ attackId: 'post_restore_retest',
+        expected: '시험 사본 복원 직후 정상·금지 요청을 재실행하고 미실행은 구분',
+        observed: `로컬 가상 사건: 복원 뒤 재시험 ${recovery.retests.length}건 실제 실행, retestPassed=${recovery.retestPassed}; 실제 브라우저·운영 회수는 미실행` });
+      passed.push(recovery.retestPassed === true);
     }
     return finish(attempts, passed);
   }

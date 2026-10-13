@@ -1,0 +1,287 @@
+{
+  "schema": "aleph.recovery.verification.v1",
+  "executedAt": "2026-10-13T06:34:29.905Z",
+  "command": "npm run recovery:check",
+  "scope": "local_synthetic_only",
+  "backupVersion": "9단계 검증본",
+  "backupCommit": "f2c660fb2241343fe2db71123d4981d6a34c10ad",
+  "backupHash": "1eb149a63b2f37bfbd9b55258115f9c133a4c63f473dc7639a5e7b3f3e559de0",
+  "checks": [
+    {
+      "name": "backup_re_read_hash_verified",
+      "passed": true
+    },
+    {
+      "name": "restore_version_and_changes_previewed",
+      "passed": true
+    },
+    {
+      "name": "invalid_backup_stops_before_write",
+      "passed": true
+    },
+    {
+      "name": "missing_backup_stops_before_write",
+      "passed": true
+    },
+    {
+      "name": "restored_policy_re_read_verified",
+      "passed": true
+    },
+    {
+      "name": "other_policy_and_old_audit_preserved",
+      "passed": true
+    }
+  ],
+  "retests": [
+    {
+      "name": "registered_normal",
+      "expected": "allow",
+      "actual": "allow",
+      "passed": true
+    },
+    {
+      "name": "unregistered",
+      "expected": "deny",
+      "actual": "deny",
+      "passed": true
+    },
+    {
+      "name": "compound_risk",
+      "expected": "step_up",
+      "actual": "step_up",
+      "passed": true
+    },
+    {
+      "name": "fresh_step_up",
+      "expected": "allow",
+      "actual": "allow",
+      "passed": true
+    },
+    {
+      "name": "global_note_list",
+      "expected": "deny",
+      "actual": "deny",
+      "passed": true
+    },
+    {
+      "name": "notice_write",
+      "expected": "deny",
+      "actual": "deny",
+      "passed": true
+    },
+    {
+      "name": "detection_12_cases",
+      "expected": 12,
+      "actual": 12,
+      "passed": true
+    },
+    {
+      "name": "A_own_create",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "name": "B_own_create",
+      "expected": 201,
+      "actual": 201,
+      "passed": true
+    },
+    {
+      "name": "B_restored_snapshot_hash",
+      "expected": "31b9fa4da989b68c5251a45cb9e953d9f8e690cb80b8dc2cb45dde9ffe50c1c8",
+      "actual": "31b9fa4da989b68c5251a45cb9e953d9f8e690cb80b8dc2cb45dde9ffe50c1c8",
+      "passed": true
+    },
+    {
+      "name": "A_own_list",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "A_list_scope",
+      "expected": "[\"1686d398-a04c-4500-97e0-9f7a6c98fc5f\"]",
+      "actual": "[\"1686d398-a04c-4500-97e0-9f7a6c98fc5f\"]",
+      "passed": true
+    },
+    {
+      "name": "A_own_read",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "A_own_update",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "A_other_GET",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "A_other_PUT",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "A_other_DELETE",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "A_owner_change",
+      "expected": 403,
+      "actual": 403,
+      "passed": true
+    },
+    {
+      "name": "B_own_list",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "B_list_scope",
+      "expected": "[\"11de6d38-4a85-4e87-8354-08441ff07673\"]",
+      "actual": "[\"11de6d38-4a85-4e87-8354-08441ff07673\"]",
+      "passed": true
+    },
+    {
+      "name": "B_own_read",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "B_own_update",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "B_other_GET",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "B_other_PUT",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "B_other_DELETE",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "B_owner_change",
+      "expected": 403,
+      "actual": 403,
+      "passed": true
+    },
+    {
+      "name": "anonymous_GET",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous_POST",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous_PUT",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "anonymous_DELETE",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "token_forged",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "token_expired",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "token_other_audience",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "token_other_issuer",
+      "expected": 401,
+      "actual": 401,
+      "passed": true
+    },
+    {
+      "name": "student_notice_write",
+      "expected": 403,
+      "actual": 403,
+      "passed": true
+    },
+    {
+      "name": "A_own_delete",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "A_deleted_read",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    },
+    {
+      "name": "B_own_delete",
+      "expected": 200,
+      "actual": 200,
+      "passed": true
+    },
+    {
+      "name": "B_deleted_read",
+      "expected": 404,
+      "actual": 404,
+      "passed": true
+    }
+  ],
+  "sources": {
+    "src/recovery-policy.mjs": "3ad3c34b6e00b4f5429ab9d68b04fc6aaca31856daea808adcaed1ecf13801fd",
+    "scripts/check-recovery.mjs": "1a1c13846a13405311a92fd2df6e3ddb8f5865acb69d818e855d6c7d2621cca2",
+    "src/verify-login.mjs": "c8fa6842c7904f9430e002bd92207d4aef9d54739a712f716153a2cb96e7389b",
+    "src/decider.mjs": "1eb149a63b2f37bfbd9b55258115f9c133a4c63f473dc7639a5e7b3f3e559de0",
+    "src/detect.mjs": "be38f54ba02c3238cdd3f185db95ca7f204fcaeb0c7de69fec258deec99e09ee",
+    "api/notes.js": "4766b6816f880798522d2637c71036d703f7d294f9f4708712af136cb847f147",
+    "api/notices.js": "4e8ea14cafadcd878ef1d98e7739572fbba1cb8ac5140c7c7d0bb7baf32774ad"
+  },
+  "backupVerified": true,
+  "retestPassed": true,
+  "unexecuted": [
+    "live_browser_B_restore",
+    "engine_revocation_and_timing"
+  ],
+  "productionPolicyChanged": false
+}

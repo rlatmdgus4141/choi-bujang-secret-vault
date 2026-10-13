@@ -26,7 +26,8 @@
     "xdr:exfiltration:respond": "node scripts/xdr-exfiltration-replay.mjs exfiltration",
     "recovery:policy:preview": "node scripts/recovery-policy.mjs preview",
     "recovery:policy:restore": "node scripts/recovery-policy.mjs restore",
-    "test:recovery": "node --test test/stage10-recovery.test.mjs"
+    "test:recovery": "node --test test/stage10-recovery.test.mjs",
+    "recovery:check": "node scripts/check-recovery.mjs"
   },
   "engines": {
     "node": ">=22"
