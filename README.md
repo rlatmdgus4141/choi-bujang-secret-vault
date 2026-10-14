@@ -1,5 +1,18 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 12단계 보완 저장점 · 제출 기록과 별도 실측
+
+53점 심판 기록과 [동료의 공개 12단계 구현](https://github.com/minsanghwang/choi-bujang-secret-vault/blob/main/src/attack-check.mjs)을 비교했습니다.
+동료 버전은 12단계 제출 실행에서 점검 요청을 보내지 않고 observed를 not_run으로 남기며, 실제 API 표는 별도 명령에서 만듭니다.
+같은 실행 구분을 적용했습니다. `npm run bundle`의 20개 항목은 요청하지 않으므로 모두 `not_run`입니다. 이는 성공이나 방어율이 아닙니다.
+묶음은 기존대로 `/aleph.json`을 읽어 현재 커밋·배포 설정을 대조하며, 이 조회를 공격 실행 결과로 쓰지 않습니다.
+기존 공개 HTTPS GET/HEAD 자기 점검은 `npm run bundle:check`로 유지하고 가린 결과를 `artifacts/deployment-self-check.json`에 저장합니다.
+정상·금지 API의 실제 HTTP 상태·서버 요청 ID·확인 시각 표는 `npm run ops:live` → `artifacts/operations-live.json`에서 확인합니다.
+이 두 실측 보고서를 제출 observed에 옮기거나 공식 41종 판정으로 표시하지 않습니다.
+재현: `npm install` → `npm test` → 검사 커밋 운영 배포 → `npm run bundle:check` → `npm run ops:live` → `npm run bundle`.
+동료 코드의 계정·배포 설정이나 판정기는 가져오지 않았으며, 제출 실행을 나누는 구조를 참고했습니다.
+아래 헤더 연결 시도는 이전 이력이고 cc7b78b5d6b8 재판정에서도 실행 기록 대조 53점이었습니다.
+
 ## 12단계 보완 저장점 · 실제 요청과 attackId 연결
 
 심판이 읽은 05d2a9a0a2de에서 실행 결과 9개의 attackId가 실제 요청에 전달되지 않았습니다.
@@ -63,7 +76,7 @@ step=12와 판정기 계약·기존 보호 API·DB·접속 화면은 그대로 �
 3. 통합·복구·접속 앱: `npm run ops:check`, `npm test`, `npm run build -- --local`. 로컬 정적 빌드는 서버 실행이 아닙니다.
 4. 서버 실행: 기존 Vercel 프로젝트에 검사한 main 커밋을 Production으로 지정 배포합니다. 기존 Supabase URL·서버 키는 공식 비밀 설정에만 유지합니다. 새 비밀값을 코드나 묶음에 넣지 않습니다. 기존 DB에 schema.sql/단계 SQL을 무작정 재실행하지 않습니다.
 5. 접속 앱 실행: 배포 주소를 열어 로그인 → 기기 승인 → 본인 자료실. 아래 작전실에서 공개 API 점검, 승인 기기 읽기 점검을 실행합니다. 설치 표시는 기기 승인이 아닙니다.
-6. 실측: `npm run ops:live`는 현재 커밋의 실제 공개/금지 API 결과를 저장합니다. `npm run bundle`은 기존 점검과 작전실 근거를 확인해 제출 JSON을 만듭니다.
+6. 실측: `npm run ops:live`는 현재 커밋의 실제 공개/금지 API 결과와 서버 요청 ID·시각을 저장합니다. `npm run bundle:check`는 기존 공개 GET/HEAD 자기 점검을 별도로 실행합니다. `npm run bundle`은 배포 커밋을 대조하고 요청하지 않은 점검 20개를 `not_run`으로 적어 제출 JSON을 만듭니다.
 7. 중지: 브라우저에서 로그아웃하여 해당 등록을 회수하고 RAM 키·토큰을 지운 뒤 창을 닫습니다. 로컬 시험 명령 중지는 Ctrl+C입니다. 탭 종료만으로 엔진의 모든 신원이 회수된다고 보장하지 않습니다. 공유 ALEPH SDP 엔진의 실행·중지는 운영자가 담당하며 이 저장소는 엔진 프로세스를 설치하지 않습니다. 인증·RLS를 풀어서 중지하지 않습니다.
 8. 복구: `npm run recovery:policy:preview`로 검증 사본과 **시험 정책**의 차이를 확인하고, 표시된 확인값을 사용해 `npm run recovery:policy:restore -- --confirm <확인값>`를 실행합니다(정확한 인자는 아래 10단계 안내와 명령 출력 참조). 메모는 승인된 본인의 한 건만 기존 `POST /api/restore`의 dryRun → 복구 → ID·소유자·해시 재검증 순서로 수행합니다. 다른 메모·감사 이력을 보존합니다.
 9. 코드 되돌리기: git status/diff로 범위를 먼저 확인하고 11단계 기준에서 이번 단계 파일만 복원하는 별도 커밋을 만듭니다. 다른 작업·DB를 보존하며 reset --hard를 사용하지 않습니다. 실제 되돌리기는 사용자 확인 뒤 진행합니다.

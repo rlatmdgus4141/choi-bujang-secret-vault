@@ -2,7 +2,52 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
-export async function runAttackChecks(config, { requirePass = false } = {}) {
+// Stage 12 submission does not execute these checks. Live checks have their own command/report.
+const stage12Plan = [
+  ['static_note_seed_read', '공개 data.json에는 빈 메모 목록만 있음'],
+  ['anonymous_notice_list', '로그인 없는 공지 목록 조회 거부'],
+  ['anonymous_notice_update', '로그인 없는 공지 변경 거부'],
+  ['anonymous_note_read', '로그인 없는 메모 목록 조회 거부'],
+  ['anonymous_note_create', '로그인 없는 메모 추가 거부'],
+  ['malformed_login_token', '잘못된 로그인 토큰 거부'],
+  ['anonymous_item_read', '로그인 없는 개별 메모 조회 거부'],
+  ['anonymous_item_update', '로그인 없는 개별 메모 변경 거부'],
+  ['anonymous_item_delete', '로그인 없는 개별 메모 삭제 거부'],
+  ['anon_original_read', '공개 키만으로 원본 메모 조회 거부'],
+  ['anon_original_update', '공개 키만으로 원본 메모 변경 거부'],
+  ['home_security_header', '첫 화면에 nosniff 보안 헤더가 있음'],
+  ['browser_public_key_absent', '화면 코드에 데이터베이스 공개 키가 없음'],
+  ['local_existing_device_risk_zone_detection', '기기·추가 확인·구역·탐지 가상 연동을 별도 확인'],
+  ['backup_verified', '복구 사본의 무결성을 별도 확인'],
+  ['post_restore_retest', '복구 후 정상·금지 요청을 별도 확인'],
+  ['single_note_restore_matches', '본인 메모 한 건 복구 후 ID·소유자·해시 대조'],
+  ['restore_preserves_other_records', '복구 시 다른 자료와 감사 기록 보존'],
+  ['app_approval_and_request_signatures', '기기 승인·요청 서명·변조 거부를 별도 확인'],
+  ['operations_evidence_and_installable_app', '작전실·설치 화면 근거를 별도 확인하며 공식 41종 결과를 만들지 않음'],
+];
+
+function checkedApp(config) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  let app;
+  try { app = new URL(config.publicAppUrl); } catch {
+    throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
+  }
+  if (app.protocol !== 'https:' || app.username || app.password || app.search || app.hash
+      || app.pathname !== '/' || app.hostname.endsWith('.example')) {
+    throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
+  }
+  if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
+  return app;
+}
+
+export async function runAttackChecks(config, options = {}) {
+  if (config.step !== 12) return runLiveAttackChecks(config, options);
+  checkedApp(config);
+  // No fetch, credentials, DB access or imported live report in this submission path.
+  return stage12Plan.map(([attackId, expected]) => ({ attackId, expected, observed: 'not_run' }));
+}
+
+export async function runLiveAttackChecks(config, { requirePass = false } = {}) {
   // Keep request metadata and the wire header equal to the reported attempt ID.
   // This identifies a check; it never grants authentication or device approval.
   const request = (attackId, url, init = {}) => fetch(url, {
@@ -17,18 +62,7 @@ export async function runAttackChecks(config, { requirePass = false } = {}) {
     }
     return attempts;
   };
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
-  let app;
-  try {
-    app = new URL(config.publicAppUrl);
-  } catch {
-    throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
-  }
-  if (app.protocol !== 'https:' || app.username || app.password || app.search || app.hash
-      || app.pathname !== '/' || app.hostname.endsWith('.example')) {
-    throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
-  }
-  if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
+  const app = checkedApp(config);
   const response = await request(config.step >= 2 ? 'static_note_seed_read' : 'anonymous_note_read', new URL('/data.json', app), {
     redirect: 'error', signal: AbortSignal.timeout(10000),
   });

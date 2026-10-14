@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { runAttackChecks } from '../src/attack-check.mjs';
+import { runAttackChecks, runLiveAttackChecks } from '../src/attack-check.mjs';
 import { assertDeploymentMetadata, verifyDeployment } from '../scripts/verify-deployment.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
@@ -36,6 +36,31 @@ function passingResponse(url) {
   return Response.json({ error: 'login required' }, { status: 401 });
 }
 
+test('stage 12 submission sends no check requests and never imports live results as observations', async () => {
+  const previous = globalThis.fetch;
+  const originalRead = fs.readFileSync;
+  let requests = 0;
+  globalThis.fetch = async () => { requests++; throw new Error('unexpected submission request'); };
+  fs.readFileSync = () => { throw new Error('submission must not read live reports or credentials'); };
+  syncBuiltinESMExports();
+  try {
+    const attempts = await runAttackChecks(config, { requirePass: true });
+    assert.equal(requests, 0);
+    assert.equal(attempts.length, 20);
+    assert.equal(new Set(attempts.map(item => item.attackId)).size, 20);
+    assert.ok(attempts.every(item => item.observed === 'not_run'
+      && Object.keys(item).sort().join(',') === 'attackId,expected,observed'
+      && typeof item.expected === 'string' && item.expected.length > 0));
+    attempts[0].observed = 'HTTP 200';
+    assert.equal((await runAttackChecks(config))[0].observed, 'not_run');
+    await assert.rejects(runAttackChecks({ ...config, publicAppUrl: 'http://fixture.example' }));
+  } finally {
+    globalThis.fetch = previous;
+    fs.readFileSync = originalRead;
+    syncBuiltinESMExports();
+  }
+});
+
 test('strict self-checks preserve the submission schema when all actual responses pass', async () => {
   const previous = globalThis.fetch;
   const requests = [];
@@ -59,7 +84,9 @@ test('strict self-checks preserve the submission schema when all actual response
         headers: { get: name => response.headers.get(name) },
         json: () => response.json(), text: () => response.text() };
     };
-    const attempts = await runAttackChecks(config, { requirePass: true });
+    const attempts = await runLiveAttackChecks(config, { requirePass: true });
+    assert.deepEqual(attempts.map(item => item.attackId),
+      (await runAttackChecks(config)).map(item => item.attackId));
     assert.equal(attempts.length, 20);
     assert.equal(attempts.filter(item => item.observed === 'not_run').length, 11);
     const executedIds = attempts.filter(item => item.observed !== 'not_run').map(item => item.attackId).sort();
@@ -121,9 +148,9 @@ test('strict self-checks reject leaked static data, permitted app access and dir
     for (const regression of regressions) {
       globalThis.fetch = async (url, init) => regression.match(new URL(url), init)
         ? regression.response() : passingResponse(url);
-      const report = await runAttackChecks(config);
+      const report = await runLiveAttackChecks(config);
       assert.match(report.find(item => item.attackId === regression.id).observed, /확인 실패/u);
-      await assert.rejects(runAttackChecks(config, { requirePass: true }), error =>
+      await assert.rejects(runLiveAttackChecks(config, { requirePass: true }), error =>
         error.message.includes(regression.id) && !error.message.includes('Invalid API key'));
     }
   } finally { globalThis.fetch = previous; }

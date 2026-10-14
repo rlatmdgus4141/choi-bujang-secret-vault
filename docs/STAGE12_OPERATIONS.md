@@ -28,6 +28,11 @@
 
 ## 1~11단계 검증표 만드는 절차
 
+12단계 `npm run bundle`은 점검 요청을 실행하지 않아 제출 관측 20개를 모두 `not_run`으로 기록합니다.
+배포 커밋을 확인하는 `/aleph.json` 조회는 공격 시험이 아닙니다. 실제 자기 점검은 `npm run bundle:check`로 별도 실행합니다.
+그 결과는 `artifacts/deployment-self-check.json`이며, 아래 API 실측 표와 함께 확인하되 제출 관측이나 공식 41종 결과로 옮기지 않습니다.
+이 실행 구분은 [동료의 공개 12단계 구현](https://github.com/minsanghwang/choi-bujang-secret-vault/blob/main/src/attack-check.mjs)을 비교해 반영했습니다.
+
 1. `npm run ops:check`: 같은 가상 실행에서 무인증/타인 접근, 정상 CRUD, 승인 전 거부, 무서명·경로/본문 변조, 사본 복구 직후 무서명 변경 거부와 정상 조회, 기기 회수 뒤 재접속 거부를 검증합니다. 기존 정책/탐지와 복구 회귀도 실행합니다.
 2. 배포 뒤 `npm run ops:live`: 현재 로컬 커밋과 배포 커밋을 먼저 대조하고, 공개 메타데이터 정상 GET(200)과 금지 PUT(405), 무인증 보호 API(401)를 실제 전송합니다. 결과는 `artifacts/operations-live.json`입니다.
 3. 화면 「공개 API 점검」은 같은 정의를 사용합니다. 기존 보호 자료에 쓰기나 삭제를 하지 않습니다.

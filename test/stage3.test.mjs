@@ -7,7 +7,7 @@ import { createNoticesHandler } from '../api/notices.js';
 import { createNotesHandler } from '../api/notes.js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { deploymentIdentity } from '../scripts/deployment-identity.mjs';
-import { runAttackChecks } from '../src/attack-check.mjs';
+import { runLiveAttackChecks as runAttackChecks } from '../src/attack-check.mjs';
 import config from '../aleph.config.json' with { type: 'json' };
 
 // 시험용 서명 키와 토큰은 실행 중 메모리에만 두며 실제 서비스에서는 사용하지 않습니다.
