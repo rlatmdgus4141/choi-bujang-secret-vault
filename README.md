@@ -1,5 +1,21 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 7단계 가산 기준 보완 저장점 · 추가 확인의 계약 검증
+
+새 100점 기준을 현재 12단계 자료실에 대조했습니다. `step: 12`를 유지해 7 이상 조건을 충족합니다.
+판정기는 계약의 `signals`·`recentEvents`만 접속 근거로 읽으며, 클라이언트 헤더를 신뢰 값으로 바꾸거나 미확인 위치를 정상 지역으로 채우지 않습니다.
+정상 사건은 allow이고 정해진 복합 이상 사건은 step_up / step_up_required입니다. 지역 하나만으로 영구 차단하지 않고 기존 device_registered 규칙을 유지합니다.
+재확인 계약은 엔진이 전달하는 `stepUp.verified`와 0~900초의 `authAgeSeconds`입니다. 같은 주체·기기의 새 가상 요청으로 확인 전·확인 후·만료를 비교합니다.
+운영 엔진의 실제 새 로그인 시각 검증과 재로그인 전 자료 차단은 이 저장소에서 실측하지 않았습니다. 토큰을 기록하거나 브라우저가 직접 verified 값을 부여하지 않습니다.
+
+이번 보완은 `fixture:7` 출력과 검증, 문서에 한정합니다. 판정기와 자료실·기기 승인·서명·복구·12단계 제출 방식은 유지합니다.
+연습은 모든 결과의 응답 5항목·requestId·reasonCode 형식과 RULE_IDS를 대조합니다. 6단계에서 추가한 계약 밖 속성 접근 금지 시험도 함께 사용합니다.
+확인 순서: `npm install` → `npm run fixture:7` → `npm run decider:test` → `node --test test/stage6-decider.test.mjs test/stage7-decider.test.mjs` → `npm test`.
+예상 출력은 정상 allow, 복합 이상 확인 전 step_up, 재확인 후 allow, 확인 만료 후 step_up입니다.
+검사한 main 커밋을 운영 배포한 뒤 `npm run bundle`로 JSON을 만듭니다. 현재 단계 12의 묶음 점검 20개는 요청하지 않아 not_run입니다.
+실제 API 상태·서버 요청 ID·시각은 `npm run ops:live`와 자료실 아래 탈환 작전실의 공개 API 점검에서 별도로 확인합니다.
+아래 저장점은 기존 작업 이력입니다.
+
 ## 6단계 가산 기준 보완 저장점 · 최신 자료실 보존
 
 6단계 심판 점수는 사용자 확인 기준 90점입니다. 새 100점 기준을 현재 12단계 자료실에 대조했습니다.
