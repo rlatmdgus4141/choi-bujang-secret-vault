@@ -41,10 +41,13 @@ export async function checkDecider({ decide, ruleIds }) {
   const results = [];
   for (const item of checks) {
     const response = await decide(item.request);
-    const valid = validResponse(item.request, response, ruleIds)
+    const shapeValid = validResponse(item.request, response, ruleIds);
+    const valid = shapeValid
       && response.decision === item.decision
       && (!item.reasonCode || response.reasonCode === item.reasonCode);
-    results.push({ name: item.name, passed: valid });
+    results.push({ name: item.name, passed: valid,
+      decision: shapeValid ? response.decision : 'invalid',
+      reasonCode: shapeValid ? response.reasonCode : 'invalid_response' });
   }
   return results;
 }
@@ -53,7 +56,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const { decide, RULE_IDS } = await import('../src/decider.mjs');
     const results = await checkDecider({ decide, ruleIds: RULE_IDS });
-    for (const item of results) process.stdout.write(`${item.passed ? '통과' : '확인 필요'} · ${item.name}\n`);
+    for (const item of results) process.stdout.write(`${item.passed ? '통과' : '확인 필요'} · ${item.name} → ${item.decision} · ${item.reasonCode}\n`);
     process.stdout.write('이 명령은 가상 요청으로 연습하며 심판 통과 증거가 아닙니다.\n');
     if (results.some(item => !item.passed)) process.exitCode = 1;
   } catch (error) {

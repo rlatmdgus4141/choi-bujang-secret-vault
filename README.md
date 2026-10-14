@@ -1,5 +1,20 @@
 # BYTE BACK 방어전 자료실 · main 제출 소스
 
+## 6단계 가산 기준 보완 저장점 · 최신 자료실 보존
+
+6단계 심판 점수는 사용자 확인 기준 90점입니다. 새 100점 기준을 현재 12단계 자료실에 대조했습니다.
+`device_registered`는 이미 구현되어 등록 기기 정상 요청을 허용하고, 미등록·누락·잘못된 값은 `deny / device_not_registered`로 거부합니다.
+판정 규칙은 바꾸지 않았습니다. 연습 출력에 실제 decision·reasonCode를 추가하고, 계약의 18개 요청 이름만 읽는지 검증하는 시험을 보강했습니다.
+계약 밖 이름을 읽으면 실패하는 Proxy를 사용하며, 정상·미등록·추가 확인·경계값 16개 요청의 응답 5항목·요청 ID·RULE_IDS를 대조합니다.
+새 저장소의 설치와 단계 설정을 함께 확인합니다. `aleph.config.json`은 step 12를 유지하며 6 이상 조건을 충족합니다.
+
+확인 순서: `npm install` → `npm run decider:test` → `node --test test/stage6-decider.test.mjs` → `npm test`.
+연습 출력은 등록 기기 `allow / approved`, 미등록 기기 `deny / device_not_registered`를 보여야 합니다.
+검사한 main 커밋을 운영 배포한 뒤 `npm run bundle`로 제출 JSON을 만듭니다. 현재 단계는 12이므로 묶음의 점검 20개는 실행하지 않고 not_run입니다.
+실제 공개 점검은 `npm run bundle:check`, 서버 요청 ID·시각 표는 `npm run ops:live`이며, 별도 실측과 심판 판정을 구분합니다.
+접속 화면은 기존 주소에서 로그인 → 기기 승인 요청 → 승인 후 본인 자료실 순서입니다. 실제 브라우저 로그인/승인과 공식 미등록 기기 공격의 재판정은 별도 확인입니다.
+인증서·CA·개인키나 새 접속 프로그램을 만들지 않았습니다. 아래 저장점은 기존 작업 이력입니다.
+
 ## 12단계 보완 저장점 · 제출 기록과 별도 실측
 
 53점 심판 기록과 [동료의 공개 12단계 구현](https://github.com/minsanghwang/choi-bujang-secret-vault/blob/main/src/attack-check.mjs)을 비교했습니다.
