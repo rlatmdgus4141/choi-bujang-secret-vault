@@ -564,6 +564,96 @@ export function createStudentView() {
       root.appendChild(proposalsGroup);
       return root;
     },
-    renderAction() { return '학생 구현 대기: 현재 사건·조치·실제 대상·사람 확인·ACK와 원천 효과·unknown을 구분하세요.'; },
+    renderAction({ status, event, actionId, target, receipt, observation, message, confirmationExpiresAt, error }) {
+      const root = document.createElement('section');
+      const isText = value => typeof value === 'string' && value.trim() !== '';
+      const appendText = (parent, tag, text) => {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        parent.appendChild(element);
+        return element;
+      };
+      const showField = (label, value) => {
+        if (isText(value) || typeof value === 'number' && Number.isFinite(value)) appendText(root, 'p', `${label}: ${value}`);
+      };
+      const labels = {
+        idle: '아직 미실행(idle)',
+        loading: '조치 준비 또는 결과 조회 중(loading)',
+        prepared: '준비됨·미실행(prepared)',
+        executing: '서버에 전달 중(executing)',
+        pending: '서버 접수·처리 중(pending)',
+        succeeded: '효과 확인(succeeded)',
+        denied: '거절(denied)',
+        failed: '실패(failed)',
+        unknown: '결과 불명(unknown)',
+        expired: '확인 기한 지남(expired)',
+        error: '요청 처리 안 됨(error)',
+      };
+      const mismatch = isText(event?.id) && isText(receipt?.eventId) && event.id !== receipt.eventId
+        || isText(actionId) && isText(receipt?.actionId) && actionId !== receipt.actionId;
+      let currentStatus = isText(status) && Object.hasOwn(labels, status) ? status : 'unknown';
+      if (currentStatus === 'succeeded' && observation?.effectApplied !== true || mismatch || receipt?.superseded === true) currentStatus = 'unknown';
+      appendText(root, 'h3', labels[currentStatus]);
+      if (currentStatus !== status) showField('전달된 상태(status)', status);
+      const resultGuide = '같은 조치를 다시 집행하지 말고 제공 화면의 원천 결과만 재조회 버튼으로 기존 요청의 결과만 직접 확인하세요.';
+      if (currentStatus === 'idle') {
+        appendText(root, 'p', 'AI 조치 제안만으로는 실행되지 않습니다.');
+        showField('안내(message)', message);
+      } else if (currentStatus === 'loading') {
+        appendText(root, 'p', '조치를 준비하거나 연동 시스템의 결과를 조회하고 있습니다. 현재 요청의 결과는 아직 확인되지 않았습니다.');
+      } else if (currentStatus === 'prepared') {
+        appendText(root, 'p', '조치는 준비만 됐으며 아직 실행되지 않았습니다. 사건·근거·조치·실제 대상과 확인 기한을 읽고 사람 확인을 해야 합니다.');
+        appendText(root, 'p', '집행하려면 제공 화면의 대상과 조치를 확인했으며 집행합니다 버튼을 사용합니다.');
+      } else if (currentStatus === 'executing') {
+        appendText(root, 'p', '서버에 요청을 전달하고 있습니다. 실제 처리 결과와 효과는 아직 확인되지 않았습니다.');
+      } else if (currentStatus === 'pending') {
+        appendText(root, 'p', '서버가 요청을 받아 처리 중입니다. 접수 응답(ACK)은 실제 효과 확인이 아닙니다. 결과는 아직 확인되지 않았습니다.');
+      } else if (currentStatus === 'succeeded') {
+        appendText(root, 'p', '연동 시스템이 관측한 실제 효과를 확인했습니다.');
+        showField('관측 시각(observation.observedAt)', observation.observedAt);
+        appendText(root, 'p', 'effectApplied: true');
+      } else if (currentStatus === 'denied' || currentStatus === 'failed') {
+        if (isText(message)) showField('안내(message)', message);
+        else appendText(root, 'p', '추가 사유가 전달되지 않았습니다.');
+      } else if (currentStatus === 'unknown') {
+        appendText(root, 'p', '실제 효과를 확인할 수 없습니다. 성공이나 효과 없음으로 판단하지 마세요.');
+        if (mismatch) appendText(root, 'p', '영수증의 사건 또는 조치가 현재 요청과 맞지 않습니다.');
+        if (receipt?.superseded === true) appendText(root, 'p', '이전 조회는 최신 결과를 대신하지 않습니다(superseded).');
+        appendText(root, 'p', resultGuide);
+      } else if (currentStatus === 'expired') {
+        appendText(root, 'p', '사람 확인 기한이 지났습니다. 제공 화면에서 현재 기록의 조치를 다시 준비하고 대상과 기한을 확인하세요.');
+      } else if (currentStatus === 'error') {
+        appendText(root, 'p', '요청이 처리되지 않았습니다. 안전한 오류 내용을 확인하세요.');
+      }
+      if (['error', 'unknown', 'expired', 'denied', 'failed'].includes(currentStatus)) {
+        showField('오류 코드(error.code)', error?.code);
+        showField('오류 내용(error.message)', error?.message);
+      }
+      showField('사건 ID(event.id)', event?.id);
+      if (Array.isArray(event?.evidence)) {
+        const evidenceList = document.createElement('ul');
+        for (const evidence of event.evidence) {
+          if (isText(evidence?.id)) appendText(evidenceList, 'li', `근거 ID: ${evidence.id}`);
+        }
+        root.appendChild(evidenceList);
+      }
+      showField('조치 ID(actionId)', actionId);
+      showField('실제 대상 ID(target.id)', target?.id);
+      showField('대상 세대(target.generation)', target?.generation);
+      showField('요청 ID(receipt.requestId)', receipt?.requestId);
+      showField('영수증 ID(receipt.receiptId)', receipt?.receiptId);
+      showField('결과 버전(receipt.version)', receipt?.version);
+      if (currentStatus === 'prepared' || currentStatus === 'expired') showField('사람 확인 기한(confirmationExpiresAt)', confirmationExpiresAt);
+      if (receipt?.replayed === true) {
+        appendText(root, 'p', '같은 요청의 재응답(replayed: true)입니다. 새 요청을 중복 전송하지 말고 기존 요청 ID로 결과만 확인하세요.');
+      }
+      if (!mismatch) {
+        if (isText(event?.id)) root.setAttribute('data-student-action-event', event.id);
+        if (isText(receipt?.requestId)) root.setAttribute('data-student-action-request', receipt.requestId);
+      }
+      appendText(root, 'p', '연동 시스템이 지원하는 조치가 없는 기록에 조치 준비 버튼이 없는 것은 정상입니다.');
+      appendText(root, 'p', '조치 화면 취소는 이미 서버에 전달된 조치 효과를 되돌리는 기능이 아닙니다.');
+      return root;
+    },
   };
 }
