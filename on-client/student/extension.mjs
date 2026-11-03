@@ -1,6 +1,385 @@
 // 이 파일은 학생이 같은 프로젝트에서 이어서 구현합니다.
 // 제공 UI를 받은 것만으로 단계 완료를 인정하지 않습니다.
+// PC 조회는 학생 수집 파일만 읽습니다. 제공 서버·인증·보안 설정은 변경하지 않습니다.
+function createPcDashboard() {
+  const state = { status: 'idle', current: null, history: [], notice: '', loadId: 0 };
+  let updateCurrent = () => {};
+  let currentButton = null;
+  const errors = {
+    ACCESS_DENIED: '일반 권한으로 읽을 수 없습니다. 관리자 권한으로 전환하지 않고 확인 불가로 남깁니다.',
+    COMMAND_UNAVAILABLE: '이 Windows 환경에서 필요한 조회 명령을 찾지 못했습니다.',
+    VALUE_UNAVAILABLE: 'Windows가 유효한 측정값을 반환하지 않았습니다.',
+    QUERY_FAILED: '로컬 조회에 실패했습니다. 일반 PowerShell에서 다시 수집하세요.',
+    INVALID_FILE: '케셰브 수집 파일의 형식이나 값이 맞지 않습니다. 수집 도구로 새 파일을 만든 뒤 다시 조회하세요.',
+    READ_FAILED: '수집 파일을 읽지 못했습니다. 접근 가능한 JSON 파일을 다시 선택하세요.',
+    READ_TIMEOUT: '수집 파일 읽기 시간이 초과됐습니다. 파일을 다시 선택하세요.',
+    OLD_FILE: '이전 표본보다 오래된 파일입니다. 새로 수집한 파일을 선택하세요.',
+  };
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const time = value => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
+  const fail = () => { throw new Error('INVALID_FILE'); };
+  const string = (value, max = 120) => {
+    if (typeof value !== 'string' || value.length === 0 || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) fail();
+    return value;
+  };
+  const number = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail();
+    return value;
+  };
+  const array = (value, max) => {
+    if (!Array.isArray(value) || value.length > max) fail();
+    return value;
+  };
+  const error = value => {
+    const code = object(value) && Object.hasOwn(errors, value.code) ? value.code : 'QUERY_FAILED';
+    return { code, message: errors[code] };
+  };
+  function normalise(value) {
+    if (!object(value) || value.schema !== 'keshev.pc-status.v1' || !object(value.source)
+      || !['measured', 'example'].includes(value.source.mode)
+      || value.source.kind !== (value.source.mode === 'measured' ? 'windows-powershell' : 'example')
+      || typeof value.source.computerId !== 'string' || !/^[a-f0-9]{64}$/.test(value.source.computerId)
+      || !time(value.startedAt) || !time(value.finishedAt) || Date.parse(value.finishedAt) < Date.parse(value.startedAt)) fail();
+    const result = {
+      source: { mode: value.source.mode, computerId: value.source.computerId },
+      startedAt: value.startedAt, finishedAt: value.finishedAt,
+    };
+    const read = (name, unit, partial = false) => {
+      const r = value[name];
+      if (!object(r) || !(partial ? ['ok', 'partial', 'error'] : ['ok', 'error']).includes(r.status)
+        || !time(r.checkedAt) || r.unit !== unit
+        || Date.parse(r.checkedAt) < Date.parse(value.startedAt) - 1000
+        || Date.parse(r.checkedAt) > Date.parse(value.finishedAt) + 1000) fail();
+      const safe = { status: r.status, checkedAt: r.checkedAt, unit, error: error(r.error), data: null };
+      if (r.status !== 'error' || name === 'events') {
+        if (!object(r.data)) fail();
+        safe.data = r.data;
+      }
+      return safe;
+    };
+    result.cpu = read('cpu', '%');
+    if (result.cpu.data) result.cpu.data = { usagePercent: number(result.cpu.data.usagePercent, 0, 100) };
+    result.memory = read('memory', 'GiB,%');
+    if (result.memory.data) {
+      const d = result.memory.data;
+      const total = number(d.totalGiB, 0.001), used = number(d.usedGiB, 0, total);
+      const percent = number(d.usagePercent, 0, 100);
+      if (Math.abs(used / total * 100 - percent) > 1) fail();
+      result.memory.data = { totalGiB: total, usedGiB: used, usagePercent: percent };
+    }
+    result.disks = read('disks', 'GiB,%', true);
+    if (result.disks.data) {
+      const d = result.disks.data;
+      if (typeof d.systemDrive !== 'string' || !/^[A-Za-z]:$/.test(d.systemDrive)) fail();
+      const seen = new Set();
+      const items = array(d.items, 26).map(item => {
+        if (!object(item) || typeof item.id !== 'string' || !/^[A-Za-z]:$/.test(item.id)
+          || seen.has(item.id.toUpperCase()) || !['ok', 'error'].includes(item.status)) fail();
+        seen.add(item.id.toUpperCase());
+        if (item.status === 'error') return { id: item.id, status: 'error', error: error(item.error) };
+        const total = number(item.totalGiB, 0.001), free = number(item.freeGiB, 0, total);
+        const percent = number(item.freePercent, 0, 100);
+        if (Math.abs(free / total * 100 - percent) > 1) fail();
+        return { id: item.id, status: 'ok', totalGiB: total, freeGiB: free, freePercent: percent };
+      });
+      result.disks.data = { systemDrive: d.systemDrive, items };
+    }
+    result.network = read('network', '주소,상태', true);
+    if (result.network.data) {
+      const d = result.network.data;
+      if (typeof d.truncated !== 'boolean') fail();
+      const addresses = values => array(values, 64).map(value => string(value, 80));
+      result.network.data = { truncated: d.truncated, items: array(d.items, 32).map(item => {
+        if (!object(item)) fail();
+        return { label: string(item.label), ipv4: addresses(item.ipv4), ipv6: addresses(item.ipv6),
+          gateway: addresses(item.gateway), dns: addresses(item.dns) };
+      }) };
+    }
+    result.firewall = read('firewall', '상태');
+    if (result.firewall.data) {
+      const seen = new Set();
+      result.firewall.data = { items: array(result.firewall.data.items, 3).map(item => {
+        if (!object(item) || !['Domain', 'Private', 'Public'].includes(item.name) || seen.has(item.name)) fail();
+        seen.add(item.name);
+        return { name: item.name, enabled: string(item.enabled, 40),
+          defaultInboundAction: string(item.defaultInboundAction, 40), defaultOutboundAction: string(item.defaultOutboundAction, 40) };
+      }) };
+    }
+    result.events = read('events', '건', true);
+    const eventData = result.events.data;
+    if (!time(eventData.windowStart) || !time(eventData.windowEnd)
+      || Math.abs(Date.parse(eventData.windowEnd) - Date.parse(eventData.windowStart) - 86400000) > 1000
+      || Date.parse(eventData.windowEnd) > Date.parse(value.finishedAt) + 1000) fail();
+    const logs = array(eventData.logs, 2);
+    if (logs.length !== 2 || new Set(logs.map(log => log?.logName)).size !== 2) fail();
+    result.events.data = { windowStart: eventData.windowStart, windowEnd: eventData.windowEnd, logs: logs.map(log => {
+      if (!object(log) || !['System', 'Application'].includes(log.logName)
+        || !['ok', 'partial', 'error'].includes(log.status) || !time(log.checkedAt)
+        || Date.parse(log.checkedAt) > Date.parse(value.finishedAt) + 1000
+        || Date.parse(log.checkedAt) < Date.parse(value.startedAt) - 1000) fail();
+      const safe = { logName: log.logName, status: log.status, checkedAt: log.checkedAt, error: error(log.error) };
+      if (log.status === 'error') return safe;
+      const warnings = number(log.warningCount, 0, 5000), errors = number(log.errorCount, 0, 5000);
+      if (!Number.isInteger(warnings) || !Number.isInteger(errors) || warnings + errors > 5000
+        || typeof log.truncated !== 'boolean' || log.countedLimit !== 5000
+        || (log.status === 'partial') !== log.truncated) fail();
+      return { ...safe, warningCount: warnings, errorCount: errors, truncated: log.truncated };
+    }) };
+    return result;
+  }
+  const el = (parent, tag, text) => {
+    const item = document.createElement(tag);
+    if (text !== undefined) item.textContent = text;
+    if (parent) parent.appendChild(item);
+    return item;
+  };
+  const style = (item, values) => {
+    if (item.style) for (const [name, value] of Object.entries(values)) item.style[name] = value;
+    return item;
+  };
+  const format = value => new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 3 }).format(value);
+  const at = value => time(value) ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }) + ' (한국 시각)' : '확인 불가 · 수집 시각 없음';
+  const resourceText = resource => resource ? resource.error.message : '수집 파일을 아직 불러오지 않았습니다.';
+  const selectedDisk = snapshot => snapshot?.disks.data?.items.find(item => item.id.toUpperCase() === snapshot.disks.data.systemDrive.toUpperCase()) ?? null;
+  function table(parent, title, headers) {
+    const wrap = el(parent, 'div');
+    style(wrap, { overflowX: 'auto', marginTop: '12px', marginBottom: '16px' });
+    const item = el(wrap, 'table');
+    style(item, { width: '100%', borderCollapse: 'collapse' });
+    el(item, 'caption', title);
+    const head = el(el(item, 'thead'), 'tr');
+    for (const label of headers) {
+      const cell = el(head, 'th', label);
+      cell.setAttribute('scope', 'col');
+      style(cell, { textAlign: 'left', padding: '8px', borderBottom: '1px solid #d9dde3' });
+    }
+    return el(item, 'tbody');
+  }
+  function row(body, values) {
+    const item = el(body, 'tr');
+    for (const value of values) style(el(item, 'td', value), { padding: '8px', borderBottom: '1px solid #d9dde3', overflowWrap: 'anywhere', whiteSpace: 'pre-line' });
+    return item;
+  }
+  function card(parent, name, title, value, unit, checkedAt, note) {
+    const item = el(parent, 'section');
+    item.className = 'card';
+    item.setAttribute('data-student-pc-card', name);
+    style(item, { minWidth: '0', marginBottom: '0', padding: '12px', overflowWrap: 'anywhere' });
+    el(item, 'h4', title);
+    style(el(item, 'p', value), { fontSize: '1.15rem', fontWeight: '700', margin: '8px 0' });
+    el(item, 'p', '단위: ' + unit).className = 'muted';
+    el(item, 'p', '수집·확인 시각: ' + at(checkedAt)).className = 'muted';
+    el(item, 'p', note).className = 'muted';
+  }
+  function sdp(context) {
+    const resources = [context.devices, context.sessions];
+    const isDemo = context.mode === 'demo' || resources.some(resource => resource?.mode === 'demo');
+    const connected = !isDemo && resources.every(resource => resource?.status === 'ok' && resource.mode === 'connected');
+    const disconnected = !isDemo && (context.mode === 'disconnected' || resources.some(resource => resource?.mode === 'disconnected'));
+    const data = context.diagnostics?.status === 'ok' ? context.diagnostics.data : null;
+    return {
+      label: isDemo ? 'SDP 미연결 · 예제 모드' : connected ? '연결 자료 수신(제공 엔진)' : disconnected ? 'SDP 미연결' : 'SDP 연결 확인 불가',
+      checkedAt: data?.engine?.mode === (connected ? 'connected' : disconnected ? 'disconnected' : 'demo') ? data?.checkedAt : null,
+      note: connected ? '제공 기기·세션 응답의 연결 상태입니다. PC 조회와 별도입니다.' : 'PC 조회 성공과 SDP 연결 성공은 별개입니다.',
+    };
+  }
+  function chart(parent, history) {
+    const canvas = el(parent, 'canvas');
+    canvas.width = 900;
+    canvas.height = 180;
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', 'CPU와 메모리 사용률 추이. 같은 값과 수집 시각을 아래 표에서 확인할 수 있습니다.');
+    style(canvas, { width: '100%', maxWidth: '900px', height: '180px' });
+    let ctx;
+    try { ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null; } catch { return; }
+    if (!ctx) return;
+    const left = 42, right = 875, top = 12, bottom = 145;
+    ctx.font = '12px sans-serif';
+    for (const tick of [0, 50, 100]) {
+      const y = bottom - tick / 100 * (bottom - top);
+      ctx.strokeStyle = '#d9dde3'; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+      ctx.fillStyle = '#5a6472'; ctx.fillText(tick + '%', 0, y + 4);
+    }
+    for (const [name, color, dash] of [['cpu', '#2357c6', []], ['memory', '#6b3fb3', [7, 4]]]) {
+      ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; ctx.setLineDash(dash);
+      let previous = null;
+      history.forEach((snapshot, index) => {
+        const data = snapshot[name].data;
+        if (!data) { previous = null; return; }
+        const point = [left + index / Math.max(1, history.length - 1) * (right - left), bottom - data.usagePercent / 100 * (bottom - top)];
+        if (previous) { ctx.beginPath(); ctx.moveTo(...previous); ctx.lineTo(...point); ctx.stroke(); }
+        ctx.beginPath(); ctx.arc(...point, 3, 0, Math.PI * 2); ctx.fill(); previous = point;
+      });
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#5a6472'; ctx.fillText('이전 수집 → 최근 수집 (동일 간격의 표본 순서)', left, 172);
+  }
+  function paint(root, context) {
+    root.replaceChildren();
+    root.setAttribute('aria-busy', state.status === 'loading' ? 'true' : 'false');
+    el(root, 'h3', '내 PC 관제 대시보드 · 학생 추가 기능');
+    el(root, 'p', '1. PC 자원 비교  ·  2. 네트워크·방화벽 조회  ·  3. Windows 기록 집계');
+    const controls = style(el(root, 'div'), { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' });
+    const button = el(controls, 'button', '다시 조회');
+    currentButton = button;
+    button.type = 'button'; button.className = 'btn'; button.disabled = state.status === 'loading';
+    button.setAttribute('aria-label', '다시 조회');
+    const file = el(controls, 'input');
+    file.type = 'file'; file.accept = '.json,application/json'; file.hidden = true;
+    file.setAttribute('aria-label', 'PC 수집 JSON 파일');
+    button.addEventListener('click', () => { file.value = ''; file.click(); });
+    file.addEventListener('change', () => { if (file.files?.[0]) void loadFile(file.files[0]); });
+    file.addEventListener('cancel', () => {
+      state.notice = '파일 선택을 취소했습니다. 새 PC 조회는 실행되지 않았습니다.';
+      updateCurrent();
+      if (typeof currentButton?.focus === 'function') currentButton.focus();
+    });
+    const feedback = el(controls, 'p', state.status === 'loading' ? '수집 파일을 읽는 중입니다…' : state.notice || '일반 PowerShell에서 수집한 파일을 선택하세요.');
+    feedback.setAttribute('role', state.status === 'error' ? 'alert' : 'status');
+    el(root, 'p', '다시 조회는 수집 파일을 선택해 읽습니다. 새 값이 필요하면 수집 도구를 다시 실행하세요. 위쪽 다시 불러오기는 제공 자료만 갱신합니다.').className = 'muted';
+    const current = state.current;
+    const origin = current ? current.source.mode === 'measured' ? 'PC 실측 · 사용자 PC에서 수집한 파일' : '예시 값 · 실제 조회 결과가 아닌 설명용 값' : 'PC 측정값 없음';
+    const badge = el(root, 'p', origin);
+    badge.setAttribute('data-student-pc-source', current?.source.mode || 'unavailable');
+    style(badge, { fontWeight: '700', color: current?.source.mode === 'example' ? '#9a5b00' : '#1c2430' });
+    if (current) el(root, 'p', '파일 수집 종료: ' + at(current.finishedAt) + ' · 현재 실시간 값이 아닌 수집 시각의 스냅샷입니다.');
+    const cards = style(el(root, 'div'), { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' });
+    const cpu = current?.cpu, memory = current?.memory, disks = current?.disks, disk = selectedDisk(current);
+    const absentReason = state.status === 'error' ? state.notice : state.status === 'loading' ? '새 수집 파일을 읽는 중입니다.' : '수집 파일을 아직 불러오지 않았습니다.';
+    card(cards, 'cpu', 'CPU 사용률', cpu?.data ? format(cpu.data.usagePercent) + '%' : '확인 불가', '%', cpu?.checkedAt,
+      cpu?.data ? 'Win32_Processor.LoadPercentage 평균입니다.' : cpu ? resourceText(cpu) : absentReason);
+    card(cards, 'memory', '메모리 사용량', memory?.data ? format(memory.data.usedGiB) + ' / ' + format(memory.data.totalGiB) + ' GiB · ' + format(memory.data.usagePercent) + '%' : '확인 불가',
+      'GiB, %', memory?.checkedAt, memory?.data ? 'Windows 가시 물리 메모리의 사용량입니다.' : memory ? resourceText(memory) : absentReason);
+    card(cards, 'disk', '디스크 여유 공간' + (disk ? ' · ' + disk.id : ''), disk?.status === 'ok' ? format(disk.freeGiB) + ' GiB' : '확인 불가',
+      'GiB', disks?.checkedAt, disk?.status === 'ok' ? '전체 ' + format(disk.totalGiB) + ' GiB 중 ' + format(disk.freePercent) + '% 남음' : disk?.error?.message || (disks?.data ? '시스템 드라이브의 용량을 확인할 수 없습니다.' : disks ? resourceText(disks) : absentReason));
+    const connection = sdp(context);
+    card(cards, 'sdp', 'SDP 연결', connection.label, '연결 상태', connection.checkedAt, connection.note);
+
+    const trend = style(el(root, 'section'), { marginTop: '24px' });
+    el(trend, 'h4', 'PC 자원 추이와 직전 측정 비교');
+    if (!current) el(trend, 'p', '현재 수집 결과가 없어 추이를 표시할 수 없습니다.');
+    else {
+      el(trend, 'p', '이 페이지에서 불러온 같은 PC·같은 자료 유형의 최근 20개 표본입니다. 페이지를 새로 열면 비교 기록은 초기화됩니다.');
+      const previous = state.history.length > 1 ? state.history[state.history.length - 2] : null;
+      const delta = (value, before, unit) => (value - before > 0 ? '+' : '') + format(value - before) + ' ' + unit;
+      if (!previous) el(trend, 'p', '비교 자료 부족 · 더 나중에 수집한 같은 PC 파일을 불러오세요.');
+      else {
+        const oldDisk = previous.disks.data?.items.find(item => item.id === disk?.id && item.status === 'ok');
+        el(trend, 'p', '비교 기준: ' + at(previous.finishedAt) + ' → ' + at(current.finishedAt));
+        el(trend, 'p', 'CPU 변화: ' + (cpu.data && previous.cpu.data ? delta(cpu.data.usagePercent, previous.cpu.data.usagePercent, '%p') : '확인 불가'));
+        el(trend, 'p', '메모리 사용량 변화: ' + (memory.data && previous.memory.data ? delta(memory.data.usedGiB, previous.memory.data.usedGiB, 'GiB') : '확인 불가'));
+        el(trend, 'p', '동일 드라이브 여유 공간 변화: ' + (disk?.status === 'ok' && oldDisk ? delta(disk.freeGiB, oldDisk.freeGiB, 'GiB') : '확인 불가 · 같은 드라이브의 비교 자료 부족'));
+      }
+      el(trend, 'p', '추이: CPU 사용률(실선), 메모리 사용률(점선), 단위 %. 정확한 값과 시각은 아래 표에 함께 표시합니다.');
+      chart(trend, state.history);
+      const body = table(trend, '수동 수집 기록 · 항목마다 수집 시각 표시', ['수집 종료 시각', 'CPU (%)', '메모리 사용 (GiB)', '메모리 (%)', '시스템 디스크 여유 (GiB)']);
+      for (const snapshot of state.history) {
+        const drive = selectedDisk(snapshot);
+        row(body, [at(snapshot.finishedAt), (snapshot.cpu.data ? format(snapshot.cpu.data.usagePercent) : '확인 불가') + '\n' + at(snapshot.cpu.checkedAt),
+          (snapshot.memory.data ? format(snapshot.memory.data.usedGiB) : '확인 불가') + '\n' + at(snapshot.memory.checkedAt),
+          (snapshot.memory.data ? format(snapshot.memory.data.usagePercent) : '확인 불가') + '\n' + at(snapshot.memory.checkedAt),
+          (drive?.status === 'ok' ? drive.id + ' ' + format(drive.freeGiB) : '확인 불가') + '\n' + at(snapshot.disks.checkedAt)]);
+      }
+      const diskBody = table(trend, '현재 수집 파일의 고정 드라이브', ['드라이브', '남은 공간', '전체 공간', '단위', '수집 시각']);
+      if (disks.data) {
+        if (disks.data.items.length === 0) row(diskBody, ['없음', '조회된 고정 드라이브 없음', '—', 'GiB', at(disks.checkedAt)]);
+        for (const drive of disks.data.items) row(diskBody, [drive.id, drive.status === 'ok' ? format(drive.freeGiB) : '확인 불가 · ' + drive.error.message,
+          drive.status === 'ok' ? format(drive.totalGiB) : '확인 불가', 'GiB', at(disks.checkedAt)]);
+      } else row(diskBody, ['확인 불가', resourceText(disks), '확인 불가', 'GiB', at(disks.checkedAt)]);
+    }
+    const settings = style(el(root, 'section'), { marginTop: '24px' });
+    el(settings, 'h4', '네트워크·방화벽 조회');
+    el(settings, 'p', '읽기 전용 조회입니다. IP·방화벽·보안 설정을 변경하지 않습니다.');
+    if (!current) el(settings, 'p', '확인 불가 · ' + absentReason);
+    else {
+      const network = current.network, firewall = current.firewall;
+      const networkBody = table(settings, '로컬 네트워크 구성', ['인터페이스', '항목', '값', '단위', '수집 시각']);
+      if (!network.data) row(networkBody, ['확인 불가', '네트워크', resourceText(network), '주소, 상태', at(network.checkedAt)]);
+      else {
+        if (network.data.items.length === 0) row(networkBody, ['없음', '네트워크', '조회된 인터페이스 없음', '상태', at(network.checkedAt)]);
+        for (const item of network.data.items) for (const [name, key] of [['IPv4', 'ipv4'], ['IPv6', 'ipv6'], ['게이트웨이', 'gateway'], ['DNS', 'dns']]) {
+          row(networkBody, [item.label, name, item[key].length ? item[key].join(', ') : '설정된 주소 없음', '주소', at(network.checkedAt)]);
+        }
+        if (network.data.truncated) el(settings, 'p', '일부 조회 · 인터페이스 32개까지만 표시합니다.');
+      }
+      const firewallBody = table(settings, 'Windows 방화벽 프로필별 적용 설정', ['프로필', '사용 여부', '기본 인바운드', '기본 아웃바운드', '수집 시각']);
+      const enabled = { True: '사용(True)', False: '사용 안 함(False)', NotConfigured: '설정 확인 불가(NotConfigured)' };
+      const action = { Allow: '허용(Allow)', Block: '차단(Block)', NotConfigured: '설정 확인 불가(NotConfigured)' };
+      if (!firewall.data) row(firewallBody, ['확인 불가', resourceText(firewall), '확인 불가', '확인 불가', at(firewall.checkedAt)]);
+      else {
+        if (firewall.data.items.length === 0) row(firewallBody, ['없음', '조회된 프로필 없음', '확인 불가', '확인 불가', at(firewall.checkedAt)]);
+        for (const item of firewall.data.items) row(firewallBody, [item.name, enabled[item.enabled] || '확인 불가', action[item.defaultInboundAction] || '확인 불가',
+          action[item.defaultOutboundAction] || '확인 불가', at(firewall.checkedAt)]);
+      }
+      el(settings, 'p', '방화벽 값의 단위는 설정 상태입니다. 프로필 설정 조회이며 모든 규칙의 효과나 통신 안전성을 검사한 결과는 아닙니다.').className = 'muted';
+    }
+    const events = style(el(root, 'section'), { marginTop: '24px' });
+    el(events, 'h4', '최근 Windows 기록 · System / Application');
+    el(events, 'p', '이 경고·오류 건수는 Windows 기록 집계이며 침해나 공격 탐지 결과가 아닙니다.');
+    if (!current) el(events, 'p', '확인 불가 · ' + absentReason);
+    else {
+      const resource = current.events;
+      el(events, 'p', '조회 구간: ' + at(resource.data.windowStart) + ' ~ ' + at(resource.data.windowEnd) + ' · 최근 24시간');
+      const body = table(events, 'Windows 경고·오류 집계', ['로그', '경고', '오류', '단위', '집계 상태', '수집 시각']);
+      for (const log of resource.data.logs) {
+        const prefix = log.truncated ? '최소 ' : '';
+        row(body, [log.logName, log.status === 'error' ? '확인 불가' : prefix + format(log.warningCount),
+          log.status === 'error' ? '확인 불가' : prefix + format(log.errorCount), '건',
+          log.status === 'error' ? log.error.message : log.truncated ? '일부 집계 · 최근 5,000건만 집계' : '해당 구간 집계', at(log.checkedAt)]);
+      }
+      el(events, 'p', '0건은 해당 구간을 조회했지만 일치하는 기록이 없다는 뜻입니다. 접근 거부·조회 실패는 확인 불가로 구분합니다.').className = 'muted';
+    }
+  }
+  async function loadFile(file) {
+    const id = ++state.loadId;
+    state.status = 'loading'; state.current = null; state.notice = '';
+    updateCurrent();
+    let timer;
+    try {
+      if (!file || typeof file.text !== 'function' || typeof file.size !== 'number' || file.size > 262144) fail();
+      const text = await Promise.race([
+        file.text(),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('READ_TIMEOUT')), 10000); }),
+      ]);
+      if (id !== state.loadId) return;
+      let value;
+      try { value = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { fail(); }
+      const snapshot = normalise(value);
+      const last = state.history[state.history.length - 1];
+      const sameSource = last && last.source.mode === snapshot.source.mode && last.source.computerId === snapshot.source.computerId;
+      if (sameSource && Date.parse(snapshot.finishedAt) < Date.parse(last.finishedAt)) throw new Error('OLD_FILE');
+      if (!sameSource) state.history = [];
+      const duplicate = sameSource && Date.parse(snapshot.finishedAt) === Date.parse(last.finishedAt);
+      if (!duplicate) state.history = [...state.history, snapshot].slice(-20);
+      state.current = duplicate ? last : snapshot;
+      state.status = 'ok';
+      state.notice = duplicate ? '동일 수집 시각의 파일입니다. 새 측정값이 추가된 것은 아닙니다.' : '수집 파일을 읽었습니다. 항목별 시각·실패 여부를 확인하세요.';
+      if (last && !sameSource) state.notice += ' PC 또는 실측/예시 구분이 달라 비교 기록을 초기화했습니다.';
+    } catch (cause) {
+      if (id !== state.loadId) return;
+      const code = Object.hasOwn(errors, cause?.message) ? cause.message : 'READ_FAILED';
+      state.current = null; state.status = 'error'; state.notice = 'PC 조회 결과 확인 불가: ' + errors[code];
+    } finally {
+      clearTimeout(timer);
+      if (id === state.loadId) {
+        updateCurrent();
+        if (typeof currentButton?.focus === 'function') currentButton.focus();
+      }
+    }
+  }
+  return {
+    render(context) {
+      const root = document.createElement('section');
+      root.setAttribute('data-student-pc-dashboard', 'true');
+      updateCurrent = () => paint(root, context);
+      updateCurrent();
+      return root;
+    },
+  };
+}
+
 export function createStudentView() {
+  const pcDashboard = createPcDashboard();
   return {
     renderIdentity({ me, devices, sessions }) {
       const root = document.createElement('section');
@@ -253,6 +632,7 @@ export function createStudentView() {
     },
     renderStatus({ devices, sessions, notifications, diagnostics, mode }) {
       const root = document.createElement('section');
+      root.appendChild(pcDashboard.render({ devices, sessions, diagnostics, mode }));
       const shown = value => typeof value === 'string' && value.trim() !== '' ? value : '확인 불가';
       const appendText = (parent, tag, text) => {
         const element = document.createElement(tag);
